@@ -4,15 +4,15 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 
 | # | Spike | Status |
 |---|---|---|
-| 1a | Browser tab enumeration latency | ✅ Steady state done; cold first call to re-check |
+| 1a | Browser tab enumeration latency | ✅ Done |
 | 1b | Read Chromium `Favicons` DB while Chrome runs | ✅ Done |
-| 2 | AX windows across Spaces / fullscreen / minimized | ⏳ Needs Accessibility permission (run from Terminal) |
+| 2 | AX windows across Spaces / fullscreen / minimized | ✅ Done: plain AX misses other Spaces; remote tokens fix it. Needs a hidden-window filter |
 | 3 | Tab activation in a background window on another Space | ⏳ Interactive, do together |
 | 4a | Terminal tab label (process + cwd) from tty | ✅ Done |
 | 4b | Terminal tab enumeration via AppleScript; closing one tab | ✅ Enumeration done; closing a tab still open |
 | 5 | Stable self-signed cert keeps TCC grants across rebuilds | ⏳ Interactive (Keychain), do together |
 | 6a | Double-Shift detector logic | ✅ Done (synthetic tests) |
-| 6b | Double-Shift on real typing | ⏳ Needs Input Monitoring (run from Terminal) |
+| 6b | Double-Shift on real typing | 🟡 4/4 deliberate taps detected, 0 false triggers; timing stats pending |
 
 ---
 
@@ -21,15 +21,47 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 
 | App | Windows | Tabs | First call | Median | Max after first |
 |---|---|---|---|---|---|
-| Chrome | 5 | 24 | 1,675 ms | **33 ms** | — |
-| Safari | 1 | 13 | 1,892 ms | **5 ms** | — |
-| Terminal | 5 | 5 | 27 ms | **25 ms** | 42 ms |
+| Chrome | 5 | 24 | 92 ms | **33 ms** | — |
+| Safari | 1 | 13 | 42 ms | **3 ms** | — |
+| Terminal | 5 | 5 | 21 ms | **25 ms** | 44 ms |
 | Brave | — | — | not running, skipped (never launched) | | |
 
 - Steady state is far under the 150 ms target, so batching works.
-- **The first call took ~1.7–1.9 s** for Chrome and Safari. That run also showed the Automation prompts, so it most likely includes the time spent clicking OK. Re-run to separate that from a genuine cold-start cost (loading the app's scripting dictionary).
-  - If the cold cost is real, it doesn't change the design: the stale-while-revalidate index (§3.4) does one warm-up enumeration per app at launch and when the app is first seen, never on the palette-open path.
+- Cold first calls are 21–92 ms. A first run that also showed the Automation prompts took 1.7–1.9 s, which was the prompts, not a real startup cost.
 - Only 24 Chrome tabs were open; the 100+ tab case is still unmeasured. Batching should keep it sublinear; re-check once we have the real app.
+
+## 2. Windows across Spaces — ✅ (with one follow-up)
+`spikes/ax_windows.swift` (plain AX), `spikes/ax_all_spaces.swift` (plain AX + remote-token brute force).
+
+**Plain `kAXWindowsAttribute` only returns windows on the current Space.** Chrome returned 0 windows although AppleScript saw them; Claude, ChatGPT and Spotify also returned 0. Minimized windows *are* returned (`MINIMIZED`).
+
+**Remote tokens fix it.** `_AXUIElementCreateWithRemoteToken`, AltTab's technique (token = pid | 0 | `'coco'` | element id, ids 0…1000, 100 ms budget per app), found **26 windows vs 15**:
+
+| App | Plain AX | All Spaces | Time (all Spaces) |
+|---|---|---|---|
+| Google Chrome | 0 | **3** | 33 ms |
+| Claude | 0 | **2** | 23 ms |
+| ChatGPT | 0 | **1** | 33 ms |
+| Spotify | 0 | **1** | 40 ms |
+| Wispr Flow | 1 | 5 ⚠️ | 17 ms |
+| Docker Desktop | 0 (252 ms) | 0 (**1,502 ms**) ⚠️ | — |
+| Most other apps | = | = | 17–66 ms |
+
+Findings and plan changes:
+- **Adopt remote-token discovery** for the Windows provider, isolated in `System/` next to `_AXUIElementGetWindow`. No extra permission is needed, so **Screen Recording stays unnecessary**.
+- **False positives:** 4 of Wispr Flow's 5 "windows" (`Context Menu`, `Scratchpad`, `Meeting Recorder`, …) are hidden or ordered-out panels, not real windows.
+  → Filter: keep a window only if the window server assigns it to a Space (private `CGSCopySpacesForWindows`, as AltTab does) or it's minimized. To verify in M2.
+- **Unresponsive apps:** Docker Desktop blocked 252 ms on plain AX and 1.5 s on the brute force. A messaging timeout on the app element doesn't apply to elements created from tokens.
+  → Set `AXUIElementSetMessagingTimeout` on **every** element, scan apps **in parallel** off the main thread, and back off from an app that times out (skip it for a while and keep its last cached windows).
+- **Total serial time was 2.6 s**, dominated by Docker. Run in parallel with backoff, a full scan should take roughly as long as the slowest healthy app (~70 ms). It runs in the background only and is kept fresh by AX observers on the discovered windows.
+- **Chrome:** the brute force found 3 windows; AppleScript reported 5 earlier (windows may have changed between runs). Not critical, because Chrome *tabs* come from AppleScript, which sees every Space. Activation still needs the window's AX element, so re-check in spike 3.
+- **Fullscreen:** no window came back flagged `AXFullScreen`. Either nothing was fullscreen during the run, or the attribute isn't readable through remote tokens. Re-check in spike 3.
+
+## 6b. Double-Shift on real typing — 🟡
+`spikes/shift_recorder.swift` (now prints detections live; Ctrl-C still prints the analysis).
+
+- At hold ≤ 200 ms and gap ≤ 300 ms: **4/4 deliberate double-Shifts detected, 0 false triggers**, including Shift used for capitals.
+- Still pending: the end-of-run timing stats (hold/gap percentiles and the three threshold rows) to settle the defaults and how much slack to allow. This needs more ordinary typing per run.
 
 ## 1b. Chromium favicons — ✅
 `spikes/favicons_db.swift`

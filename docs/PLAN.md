@@ -144,7 +144,7 @@ protocol TargetProvider: Sendable {
 | Provider | Enumerate | Activate | Notes |
 |---|---|---|---|
 | **Apps** | `NSWorkspace.runningApplications` (regular activation policy only) | `NSRunningApplication.activate()` | Trivial. |
-| **Windows** | AX: `kAXWindowsAttribute` per app, read title, minimized, main. Map to `CGWindowID` with `_AXUIElementGetWindow` (private but widely used). | Unminimize if needed → `AXRaise` → set `kAXMainAttribute` → activate the app | Needs Accessibility only. **No Screen Recording** needed because titles come from AX, not `CGWindowList`. |
+| **Windows** | AX `kAXWindowsAttribute` **plus remote-token brute force** (`_AXUIElementCreateWithRemoteToken`), because plain AX misses every other Space (M0.2). Keep a window only if it's on a Space or minimized (drops hidden panels). Map to `CGWindowID` with `_AXUIElementGetWindow`. Apps are scanned in parallel with per-element timeouts and backoff for unresponsive apps. | Unminimize if needed → `AXRaise` → set `kAXMainAttribute` → activate the app | Needs Accessibility only. **No Screen Recording** needed because titles come from AX, not `CGWindowList`. |
 | **Chromium tabs** (Chrome, Brave) | One AppleScript per browser: `{id, title, URL}` of every tab of every window, returned in **one** batched Apple Event | `set active tab index` → `set index of window to 1` → activate → AX-raise the matching window | Chrome and Brave share the same scripting dictionary, so one provider is parameterized by bundle ID. |
 | **Safari tabs** | One AppleScript: `{name, URL}` of tabs of windows | `set current tab of window w to tab i` → raise the window | Safari tabs have no IDs. Verify that the URL still matches before activating, and re-scan once if it doesn't. |
 | **Terminal tabs** | AppleScript: for each window/tab get `tty`, `custom title`, `processes`, `selected` | `set selected of tab i of window w to true` → `set index of window w to 1` → activate | Label: custom title, else the foreground process + cwd. Derive cwd from the tty's foreground PID with `proc_pidinfo` (libproc), resolving only the ttys AppleScript returned and caching per tty. A full process scan takes ~54 ms. *(Verified in M0.4a.)* |
@@ -250,7 +250,8 @@ Developer ID signing + notarization, Sparkle updates, lower deployment target (m
 ## 5. Risks
 | Risk | Impact | Mitigation |
 |---|---|---|
-| AX can't see windows on other Spaces for some apps | Missing windows in results | Spike M0.2. Fall back to the private CGS/remote-token approach AltTab uses, or accept and document the limitation |
+| Plain AX can't see windows on other Spaces (**confirmed** in M0.2) | Missing windows in results | Remote-token discovery (verified: 26 vs 15 windows) plus a Space-membership filter for hidden panels |
+| Unresponsive apps block AX calls (Docker Desktop: 1.5 s) | Slow window scans | Per-element messaging timeouts, parallel scans, per-app backoff, cached results |
 | AppleScript is slow with hundreds of tabs | Stale tab lists | Batched queries, caching, refresh on deactivate, per-app timeouts |
 | Automation prompts feel intrusive | Onboarding friction | Prompt lazily per app; each provider can be disabled |
 | Private APIs (`_AXUIElementGetWindow`) | Could break on OS updates | Keep them isolated in `System/`, with a graceful fallback to title matching |
