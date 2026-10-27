@@ -1,10 +1,12 @@
 import AppKit
 import KeybindsCore
+import KeybindsPlatform
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings = Settings.default
-    private let palette = PaletteController()
+    private let index = TargetIndex()
+    private lazy var palette = PaletteController(index: index)
     private var hotkeys: HotkeyManager!
     private var menuBar: MenuBarController!
     private var onboarding: OnboardingWindowController?
@@ -29,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         Log.app.notice("launched v\(version, privacy: .public), accessibility granted: \(Permissions.accessibilityGranted)")
 
+        index.refresh()
+
         if Permissions.accessibilityGranted {
             hotkeys.startDoubleShift()
         } else {
@@ -51,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.permissionPoll = nil
                 Log.app.notice("Accessibility granted")
                 self?.hotkeys.startDoubleShift()
+                self?.index.refresh()
             }
         }
     }

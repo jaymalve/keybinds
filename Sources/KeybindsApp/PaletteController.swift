@@ -1,21 +1,48 @@
 import AppKit
+import KeybindsCore
+import KeybindsPlatform
 import SwiftUI
 
 @MainActor
 @Observable
 final class PaletteModel {
-    var query = ""
+    static let maxResults = 60
+
+    let index: TargetIndex
+    var query = "" { didSet { selection = 0 } }
+    var selection = 0
     /// Bumped on every show so the view can re-focus the search field.
     var showCount = 0
+
+    init(index: TargetIndex) {
+        self.index = index
+    }
+
+    var results: [RankedTarget] {
+        Array(index.search.search(query).prefix(Self.maxResults))
+    }
+
+    func moveSelection(by delta: Int) {
+        let count = results.count
+        guard count > 0 else { return }
+        selection = (selection + delta + count) % count
+    }
 }
 
 @MainActor
 final class PaletteController: NSObject, NSWindowDelegate {
     private static let size = NSSize(width: 680, height: 420)
 
-    private let model = PaletteModel()
+    private let model: PaletteModel
+    private let activator: Activator
     private lazy var panel: PalettePanel = makePanel()
     private var keyMonitor: Any?
+
+    init(index: TargetIndex) {
+        model = PaletteModel(index: index)
+        activator = Activator(index: index)
+        super.init()
+    }
 
     var isVisible: Bool { panel.isVisible }
 
@@ -24,6 +51,7 @@ final class PaletteController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        model.index.refresh()
         model.query = ""
         model.showCount += 1
         panel.setFrame(frameOnActiveScreen(), display: false)
@@ -58,7 +86,9 @@ final class PaletteController: NSObject, NSWindowDelegate {
         background.layer?.cornerRadius = 14
         background.layer?.masksToBounds = true
 
-        let hosting = NSHostingView(rootView: PaletteView(model: model))
+        let hosting = NSHostingView(rootView: PaletteView(model: model) { [weak self] target in
+            self?.open(target)
+        })
         hosting.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(hosting)
         NSLayoutConstraint.activate([
@@ -81,26 +111,40 @@ final class PaletteController: NSObject, NSWindowDelegate {
                       width: Self.size.width, height: Self.size.height)
     }
 
-    /// Esc closes. Arrow keys and Enter land here in M2.
+    /// Hide first so the panel gives up key focus before the target takes it.
+    private func open(_ target: Target) {
+        hide()
+        activator.activate(target)
+    }
+
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let keyCode = event.keyCode
-            let consumed = MainActor.assumeIsolated { self?.handleKey(keyCode) ?? false }
+            let control = event.modifierFlags.contains(.control)
+            let consumed = MainActor.assumeIsolated { self?.handleKey(keyCode, control: control) ?? false }
             return consumed ? nil : event
         }
     }
 
     /// Returns true when the key was handled and shouldn't reach the search field.
-    private func handleKey(_ keyCode: UInt16) -> Bool {
+    private func handleKey(_ keyCode: UInt16, control: Bool) -> Bool {
         guard panel.isKeyWindow else { return false }
-        switch keyCode {
-        case 53:  // kVK_Escape
+        switch (keyCode, control) {
+        case (53, _):  // Esc
             hide()
-            return true
+        case (125, _), (45, true):  // ↓, ⌃N
+            model.moveSelection(by: 1)
+        case (126, _), (35, true):  // ↑, ⌃P
+            model.moveSelection(by: -1)
+        case (36, _), (76, _):  // Return, keypad Enter
+            let results = model.results
+            guard results.indices.contains(model.selection) else { return true }
+            open(results[model.selection].target)
         default:
             return false
         }
+        return true
     }
 
     private func removeKeyMonitor() {
