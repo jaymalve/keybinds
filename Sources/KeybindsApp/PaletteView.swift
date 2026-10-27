@@ -66,9 +66,10 @@ struct PaletteView: View {
 
     private var summary: String {
         let targets = model.index.targets
+        let tabs = targets.filter { $0.kind == .browserTab || $0.kind == .terminalTab }.count
         let windows = targets.filter { $0.kind == .window }.count
         let apps = Set(targets.map(\.pid)).count
-        return "\(windows) windows · \(apps) apps"
+        return "\(tabs) tabs · \(windows) windows · \(apps) apps"
     }
 
     private var emptyState: some View {
@@ -104,7 +105,7 @@ private struct ResultRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            Text(result.target.kind == .app ? "App" : "Window")
+            Text(badge)
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
@@ -114,6 +115,14 @@ private struct ResultRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(selected ? Color.accentColor.opacity(0.28) : .clear, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var badge: String {
+        switch result.target.kind {
+        case .app: "App"
+        case .window: "Window"
+        case .browserTab, .terminalTab: "Tab"
+        }
     }
 
     /// Bolds matched characters.
