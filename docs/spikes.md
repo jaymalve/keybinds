@@ -55,7 +55,7 @@ Findings and plan changes:
   → Set `AXUIElementSetMessagingTimeout` on **every** element, scan apps **in parallel** off the main thread, and back off from an app that times out (skip it for a while and keep its last cached windows).
 - **Total serial time was 2.6 s**, dominated by Docker. Run in parallel with backoff, a full scan should take roughly as long as the slowest healthy app (~70 ms). It runs in the background only and is kept fresh by AX observers on the discovered windows.
 - **Chrome:** the brute force found 3 windows; AppleScript reported 5 earlier (windows may have changed between runs). Not critical, because Chrome *tabs* come from AppleScript, which sees every Space. Activation still needs the window's AX element, so re-check in spike 3.
-- **Fullscreen:** no window came back flagged `AXFullScreen`. Either nothing was fullscreen during the run, or the attribute isn't readable through remote tokens. Re-check in spike 3.
+- **Fullscreen:** untested. Nothing was fullscreen during the run. Covered in spike 3.
 
 ## 6b. Double-Shift on real typing — 🟡
 `spikes/shift_recorder.swift` (now prints detections live; Ctrl-C still prints the analysis).
