@@ -12,7 +12,7 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 | 4b | Terminal tab enumeration via AppleScript; closing one tab | ✅ Enumeration done; closing a tab still open |
 | 5 | Stable self-signed cert keeps TCC grants across rebuilds | ⏳ Interactive (Keychain), do together |
 | 6a | Double-Shift detector logic | ✅ Done (synthetic tests) |
-| 6b | Double-Shift on real typing | 🟡 4/4 deliberate taps detected, 0 false triggers; timing stats pending |
+| 6b | Double-Shift on real typing | ✅ 4/4 detected, 0 false triggers; defaults 200 ms hold / 300 ms gap |
 
 ---
 
@@ -57,11 +57,22 @@ Findings and plan changes:
 - **Chrome:** the brute force found 3 windows; AppleScript reported 5 earlier (windows may have changed between runs). Not critical, because Chrome *tabs* come from AppleScript, which sees every Space. Activation still needs the window's AX element, so re-check in spike 3.
 - **Fullscreen:** untested. Nothing was fullscreen during the run. Covered in spike 3.
 
-## 6b. Double-Shift on real typing — 🟡
+## 6b. Double-Shift on real typing — ✅
 `spikes/shift_recorder.swift` (now prints detections live; Ctrl-C still prints the analysis).
 
-- At hold ≤ 200 ms and gap ≤ 300 ms: **4/4 deliberate double-Shifts detected, 0 false triggers**, including Shift used for capitals.
-- Still pending: the end-of-run timing stats (hold/gap percentiles and the three threshold rows) to settle the defaults and how much slack to allow. This needs more ordinary typing per run.
+Run: ~90 s, 255 key presses, 4 deliberate double-Shifts, Shift also used for capitals.
+
+| Thresholds (hold / gap) | Fired at | False triggers |
+|---|---|---|
+| 150 ms / 250 ms | 6.5 s, 8.8 s, 30.6 s, 59.4 s | 0 |
+| 200 ms / 300 ms | same | 0 |
+| 250 ms / 400 ms | same | 0 |
+
+- **All three settings give the same result:** every deliberate tap is caught, and nothing else fires, even at the loosest setting.
+- **Deliberate taps are quick:** median Shift hold **88 ms**, and the gap between taps is ~**67 ms** (10th percentile of all gaps). That leaves 2–4× headroom under 200 ms / 300 ms.
+- Shift used for capitals is held much longer (90th percentile 1.4 s) and always has a letter pressed during the hold, so it's rejected by the pure-tap rule, not by timing.
+- **Decision:** keep the defaults at **hold ≤ 200 ms, gap ≤ 300 ms**, configurable in settings.
+- Caveat: a small sample (255 keys). M1 logs each trigger in debug builds so a false trigger in real use can be spotted and the thresholds revisited.
 
 ## 1b. Chromium favicons — ✅
 `spikes/favicons_db.swift`
