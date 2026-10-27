@@ -7,7 +7,7 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 | 1a | Browser tab enumeration latency | ✅ Done |
 | 1b | Read Chromium `Favicons` DB while Chrome runs | ✅ Done |
 | 2 | AX windows across Spaces / fullscreen / minimized | ✅ Done: plain AX misses other Spaces; remote tokens fix it. Needs a hidden-window filter |
-| 3 | Tab activation in a background window on another Space | 🟡 Window part ✅ (in M2); tab part moves to M3 |
+| 3 | Tab activation in a background window on another Space | ✅ Done (windows in M2, tabs in M3) |
 | 4a | Terminal tab label (process + cwd) from tty | ✅ Done |
 | 4b | Terminal tab enumeration via AppleScript; closing one tab | ✅ Enumeration done; closing a tab still open |
 | 5 | Stable self-signed cert keeps TCC grants across rebuilds | ✅ Done (in M1) |
@@ -82,7 +82,7 @@ Run: ~90 s, 255 key presses, 4 deliberate double-Shifts, Shift also used for cap
 - Verified: after granting Accessibility once, two rebuilds with real code changes launched with `accessibility granted: true`, with no re-prompt.
 - Gotcha: in zsh, `log` is a shell builtin. Use `/usr/bin/log show --predicate 'subsystem == "com.jaymalve.keybinds"'`.
 
-## 3. Switching across Spaces — 🟡 (windows ✅, tabs in M3)
+## 3. Switching across Spaces — ✅
 Verified in the M2 app (`Activator`: `_SLPSSetFrontProcessWithOptions` + synthesized make-key event + `AXRaise`):
 
 - ✅ Window on another Space: switches Space and focuses the exact window.
@@ -90,7 +90,12 @@ Verified in the M2 app (`Activator`: `_SLPSSetFrontProcessWithOptions` + synthes
 - ✅ Minimized window: unminimized and focused.
 - ✅ App with no windows (Notes, Messages): activated.
 - ✅ Empty query + Enter returns to the previously used window (the current one is listed last).
-- Still open: activating a specific **tab** in a background browser window on another Space. Tested in M3.
+- ✅ (M3) Background Chrome tab in a window on another Space: switches Space and shows the right tab.
+- M3 findings while getting there:
+  - Recent Chrome returns window/tab ids as **text**. Comparing them as numbers in AppleScript silently never matches, so ids are now kept and compared as text.
+  - Running NSAppleScript on several threads at once mixed up results, so all scripts now run on one serial queue, each with a 2 s timeout.
+  - Palette selection must track the target's identity, not its row: rows re-sort while scans land.
+  - Open: one Chrome window couldn't be matched to its CGWindowID by title, and fell back to an AppleScript raise. Investigate if it causes wrong-Space switches.
 
 ## 1b. Chromium favicons — ✅
 `spikes/favicons_db.swift`
