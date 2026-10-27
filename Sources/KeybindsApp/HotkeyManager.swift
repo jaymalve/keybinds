@@ -29,7 +29,7 @@ final class HotkeyManager {
             MainActor.assumeIsolated { self?.handle(event) }
             return event
         }) { monitors.append(local) }
-        Log.hotkey.info("double-Shift monitoring started")
+        Log.hotkey.notice("double-Shift monitoring started")
     }
 
     func startCombo() {

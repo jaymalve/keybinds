@@ -10,7 +10,7 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 | 3 | Tab activation in a background window on another Space | ⏳ Interactive, do together |
 | 4a | Terminal tab label (process + cwd) from tty | ✅ Done |
 | 4b | Terminal tab enumeration via AppleScript; closing one tab | ✅ Enumeration done; closing a tab still open |
-| 5 | Stable self-signed cert keeps TCC grants across rebuilds | ⏳ Interactive (Keychain), do together |
+| 5 | Stable self-signed cert keeps TCC grants across rebuilds | ✅ Done (in M1) |
 | 6a | Double-Shift detector logic | ✅ Done (synthetic tests) |
 | 6b | Double-Shift on real typing | ✅ 4/4 detected, 0 false triggers; defaults 200 ms hold / 300 ms gap |
 
@@ -73,6 +73,14 @@ Run: ~90 s, 255 key presses, 4 deliberate double-Shifts, Shift also used for cap
 - Shift used for capitals is held much longer (90th percentile 1.4 s) and always has a letter pressed during the hold, so it's rejected by the pure-tap rule, not by timing.
 - **Decision:** keep the defaults at **hold ≤ 200 ms, gap ≤ 300 ms**, configurable in settings.
 - Caveat: a small sample (255 keys). M1 logs each trigger in debug builds so a false trigger in real use can be spotted and the thresholds revisited.
+
+## 5. Stable signing identity — ✅
+`scripts/make-dev-cert.sh`, `scripts/bundle.sh`
+
+- A self-signed "Keybinds Dev" code-signing cert, made with openssl and imported into the login keychain with `-T /usr/bin/codesign`. **It doesn't need to be trusted**: codesign uses it without prompting, even though `find-identity -v` lists it as not valid.
+- Designated requirement: `identifier "com.jaymalve.keybinds" and certificate leaf = H"011a51c2…"`. It depends only on the bundle ID and the cert, not on the binary.
+- Verified: after granting Accessibility once, two rebuilds with real code changes launched with `accessibility granted: true`, with no re-prompt.
+- Gotcha: in zsh, `log` is a shell builtin. Use `/usr/bin/log show --predicate 'subsystem == "com.jaymalve.keybinds"'`.
 
 ## 1b. Chromium favicons — ✅
 `spikes/favicons_db.swift`

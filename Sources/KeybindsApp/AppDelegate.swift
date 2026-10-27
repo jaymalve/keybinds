@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Combos are Carbon hotkeys and work without any permission.
         hotkeys.startCombo()
 
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        Log.app.notice("launched v\(version, privacy: .public), accessibility granted: \(Permissions.accessibilityGranted)")
+
         if Permissions.accessibilityGranted {
             hotkeys.startDoubleShift()
         } else {
@@ -46,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard Permissions.accessibilityGranted else { return }
                 self?.permissionPoll?.invalidate()
                 self?.permissionPoll = nil
-                Log.app.info("Accessibility granted")
+                Log.app.notice("Accessibility granted")
                 self?.hotkeys.startDoubleShift()
             }
         }
