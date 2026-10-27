@@ -9,8 +9,10 @@ final class PaletteModel {
     static let maxResults = 60
 
     let index: TargetIndex
-    var query = "" { didSet { selection = 0 } }
-    var selection = 0
+    var query = "" { didSet { selectedID = nil } }
+    /// The selected target, by identity: rows reorder while scans land, and an index would drift onto a neighbor.
+    /// nil means "the first result".
+    var selectedID: String?
     /// Bumped on every show so the view can re-focus the search field.
     var showCount = 0
 
@@ -22,10 +24,20 @@ final class PaletteModel {
         Array(index.search.search(query).prefix(Self.maxResults))
     }
 
+    func selectedIndex(in results: [RankedTarget]) -> Int {
+        selectedID.flatMap { id in results.firstIndex { $0.id == id } } ?? 0
+    }
+
+    var selectedTarget: Target? {
+        let results = results
+        return results.isEmpty ? nil : results[selectedIndex(in: results)].target
+    }
+
     func moveSelection(by delta: Int) {
-        let count = results.count
-        guard count > 0 else { return }
-        selection = (selection + delta + count) % count
+        let results = results
+        guard !results.isEmpty else { return }
+        let next = (selectedIndex(in: results) + delta + results.count) % results.count
+        selectedID = results[next].id
     }
 }
 
@@ -53,6 +65,7 @@ final class PaletteController: NSObject, NSWindowDelegate {
     func show() {
         model.index.refresh()
         model.query = ""
+        model.selectedID = nil
         model.showCount += 1
         panel.setFrame(frameOnActiveScreen(), display: false)
         panel.makeKeyAndOrderFront(nil)
@@ -138,9 +151,8 @@ final class PaletteController: NSObject, NSWindowDelegate {
         case (126, _), (35, true):  // ↑, ⌃P
             model.moveSelection(by: -1)
         case (36, _), (76, _):  // Return, keypad Enter
-            let results = model.results
-            guard results.indices.contains(model.selection) else { return true }
-            open(results[model.selection].target)
+            guard let target = model.selectedTarget else { return true }
+            open(target)
         default:
             return false
         }

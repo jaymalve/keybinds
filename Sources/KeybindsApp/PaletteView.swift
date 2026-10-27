@@ -8,6 +8,7 @@ struct PaletteView: View {
 
     var body: some View {
         let results = model.results
+        let selected = model.selectedIndex(in: results)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
@@ -30,7 +31,7 @@ struct PaletteView: View {
                     ScrollView {
                         LazyVStack(spacing: 2) {
                             ForEach(Array(results.enumerated()), id: \.element.id) { i, result in
-                                ResultRow(result: result, selected: i == model.selection)
+                                ResultRow(result: result, selected: i == selected)
                                     .id(result.id)
                                     .contentShape(Rectangle())
                                     .onTapGesture { onOpen(result.target) }
@@ -38,9 +39,8 @@ struct PaletteView: View {
                         }
                         .padding(8)
                     }
-                    .onChange(of: model.selection) {
-                        guard results.indices.contains(model.selection) else { return }
-                        proxy.scrollTo(results[model.selection].id)
+                    .onChange(of: model.selectedID) {
+                        if let id = model.selectedID { proxy.scrollTo(id) }
                     }
                     .onChange(of: model.query) {
                         if let first = results.first { proxy.scrollTo(first.id, anchor: .top) }
