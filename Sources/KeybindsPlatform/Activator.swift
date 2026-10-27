@@ -15,12 +15,17 @@ public struct Activator {
     }
 
     public func activate(_ target: Target) {
-        let app = NSRunningApplication(processIdentifier: target.pid)
+        let app = target.pid > 0 ? NSRunningApplication(processIdentifier: target.pid) : nil
         if app?.isHidden == true { app?.unhide() }
 
         switch target.locator {
         case .app(let pid):
             if !PrivateAPIs.focus(pid: pid, windowID: 0) { app?.activate() }
+
+        case .launch(let path):
+            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: .init()) { _, error in
+                if let error { log.error("launch failed: \(error.localizedDescription, privacy: .public)") }
+            }
 
         case .window(let pid, let windowID):
             focusWindow(pid: pid, windowID: windowID, app: app)
@@ -36,7 +41,7 @@ public struct Activator {
             activateTab(.terminal(windowID: windowID, tty: tty), scriptWindowID: windowID,
                         bundleID: target.bundleID ?? "com.apple.Terminal", target: target, app: app)
         }
-        index.noteActivated(pid: target.pid)
+        index.noteActivated(target)
         index.scheduleRefresh()
     }
 

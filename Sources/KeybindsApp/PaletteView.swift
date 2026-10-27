@@ -31,7 +31,8 @@ struct PaletteView: View {
                     ScrollView {
                         LazyVStack(spacing: 2) {
                             ForEach(Array(results.enumerated()), id: \.element.id) { i, result in
-                                ResultRow(result: result, selected: i == selected)
+                                ResultRow(result: result, selected: i == selected,
+                                          favicon: model.favicons.image(forURL: result.target.url))
                                     .id(result.id)
                                     .contentShape(Rectangle())
                                     .onTapGesture { onOpen(result.target) }
@@ -53,7 +54,7 @@ struct PaletteView: View {
             HStack {
                 Text(summary)
                 Spacer()
-                Text("↑↓ select   ↩ open   ⇧⇧ / esc close")
+                Text("t/w/a + space to filter   ↑↓ select   ↩ open   esc close")
             }
             .font(.caption)
             .foregroundStyle(.tertiary)
@@ -90,12 +91,11 @@ struct PaletteView: View {
 private struct ResultRow: View {
     let result: RankedTarget
     let selected: Bool
+    let favicon: NSImage?
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(nsImage: AppIcons.icon(for: result.target.pid))
-                .resizable()
-                .frame(width: 30, height: 30)
+            icon.frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(highlighted(result.target.title, result.titleMatches, base: .primary))
                     .font(.system(size: 14))
@@ -117,9 +117,26 @@ private struct ResultRow: View {
         .background(selected ? Color.accentColor.opacity(0.28) : .clear, in: RoundedRectangle(cornerRadius: 8))
     }
 
+    /// Tabs with a favicon show it, with the browser's icon as a small badge.
+    @ViewBuilder private var icon: some View {
+        let appIcon = AppIcons.icon(for: result.target)
+        if let favicon {
+            ZStack(alignment: .bottomTrailing) {
+                Image(nsImage: favicon).resizable().interpolation(.high)
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .frame(width: 30, height: 30, alignment: .topLeading)
+                    .padding([.top, .leading], 2)
+                Image(nsImage: appIcon).resizable().frame(width: 15, height: 15)
+            }
+        } else {
+            Image(nsImage: appIcon).resizable()
+        }
+    }
+
     private var badge: String {
         switch result.target.kind {
-        case .app: "App"
+        case .app: if case .launch = result.target.locator { "Launch" } else { "App" }
         case .window: "Window"
         case .browserTab, .terminalTab: "Tab"
         }
@@ -144,13 +161,21 @@ private struct ResultRow: View {
 
 @MainActor
 enum AppIcons {
-    private static var cache: [pid_t: NSImage] = [:]
+    private static var cache: [String: NSImage] = [:]
 
-    static func icon(for pid: pid_t) -> NSImage {
-        if let cached = cache[pid] { return cached }
-        let icon = NSRunningApplication(processIdentifier: pid)?.icon
-            ?? NSWorkspace.shared.icon(for: .application)
-        cache[pid] = icon
+    static func icon(for target: Target) -> NSImage {
+        let key: String
+        let make: () -> NSImage?
+        if case .launch(let path) = target.locator {
+            key = path
+            make = { NSWorkspace.shared.icon(forFile: path) }
+        } else {
+            key = "pid:\(target.pid)"
+            make = { NSRunningApplication(processIdentifier: target.pid)?.icon }
+        }
+        if let cached = cache[key] { return cached }
+        let icon = make() ?? NSWorkspace.shared.icon(for: .application)
+        cache[key] = icon
         return icon
     }
 }

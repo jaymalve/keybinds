@@ -15,6 +15,12 @@ public final class TargetIndex {
     public private(set) var search = SearchIndex([])
 
     @ObservationIgnored let tabScanner = TabScanner()
+    @ObservationIgnored private var settings = Settings.default
+    @ObservationIgnored private var history: UsageHistory
+    @ObservationIgnored private let historyStore = HistoryStore()
+    @ObservationIgnored private var historySave: Task<Void, Never>?
+    @ObservationIgnored private var installed: [InstalledApp] = []
+    @ObservationIgnored private var installedScannedAt = Date.distantPast
     @ObservationIgnored private let windowScanner = WindowScanner()
     @ObservationIgnored private let recency = AppRecency()
 
@@ -43,6 +49,7 @@ public final class TargetIndex {
     }
 
     public init() {
+        history = historyStore.load()
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification,
                      NSWorkspace.didActivateApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification,
@@ -63,14 +70,37 @@ public final class TargetIndex {
         }
     }
 
+    public func apply(_ settings: Settings) {
+        self.settings = settings
+        // Drop tabs from sources that were just switched off; their apps fall back to windows.
+        tabs = tabs.filter { pid, _ in
+            let bundleID = apps.first { $0.pid == pid }?.bundleID
+            return TabSource.forBundle(bundleID).map { !settings.disabledTabSources.contains($0.rawValue) } ?? false
+        }
+        rebuild()
+        refresh()
+    }
+
     public func refresh() {
         let apps = AppInfo.regularApps()
         self.apps = apps
         refreshWindows(apps)
         for app in apps {
             guard let bundleID = app.bundleID, let source = TabSource.forBundle(bundleID),
+                  !settings.disabledTabSources.contains(source.rawValue),
                   !tabsDenied.contains(bundleID) else { continue }
             refreshTabs(app, bundleID: bundleID, source: source)
+        }
+        refreshInstalledApps()
+    }
+
+    /// Installed apps change rarely; rescan at most every 10 minutes.
+    private func refreshInstalledApps() {
+        guard settings.showNotRunningApps, Date().timeIntervalSince(installedScannedAt) > 600 else { return }
+        installedScannedAt = Date()
+        Task {
+            self.installed = await Task.detached(priority: .utility) { InstalledApp.scan() }.value
+            self.rebuild()
         }
     }
 
@@ -108,6 +138,11 @@ public final class TargetIndex {
                 }
                 self.tabs[app.pid] = scripted
                 log.debug("tabs: \(app.name, privacy: .public) \(scripted.reduce(0) { $0 + $1.tabs.count }) in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+                guard !self.settings.disabledTabSources.contains(source.rawValue) else {
+                    self.tabs[app.pid] = nil
+                    self.scanningTabs.remove(app.pid)
+                    return
+                }
             } catch let error as AppleScriptRunner.ScriptError where error.isNotAuthorized {
                 log.notice("Automation denied for \(bundleID, privacy: .public); showing its windows instead")
                 self.tabsDenied.insert(bundleID)
@@ -128,8 +163,19 @@ public final class TargetIndex {
         scriptWindowMap[ScriptWindowKey(pid: pid, windowID: scriptWindowID)]
     }
 
-    func noteActivated(pid: pid_t) {
-        recency.touch(pid)
+    /// Records a jump: app recency now, usage history (saved shortly after) for ranking.
+    func noteActivated(_ target: Target) {
+        if case .launch = target.locator {} else { recency.touch(target.pid) }
+        history.record(target.historyKey)
+        search = SearchIndex(targets, frecency: { [history] in history.frecency($0.historyKey) })
+        historySave?.cancel()
+        historySave = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, !Task.isCancelled else { return }
+            do { try self.historyStore.save(self.history) } catch {
+                log.error("saving history failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Merge and order
@@ -181,6 +227,17 @@ public final class TargetIndex {
             }
         }
 
+        // Installed apps that aren't running go last; they're for launching by name.
+        if settings.showNotRunningApps {
+            let runningIDs = Set(apps.compactMap(\.bundleID))
+            for app in installed where !(app.bundleID.map(runningIDs.contains) ?? false) {
+                keyed.append(Keyed(target: Target(kind: .app, title: app.name, subtitle: "Not running · Application",
+                                                  appName: app.name, bundleID: app.bundleID, pid: 0,
+                                                  locator: .launch(path: app.path)),
+                                   key: (Int.max, Int.max, 0)))
+            }
+        }
+
         keyed.sort { $0.key < $1.key }
         var ordered = keyed.map(\.target)
 
@@ -191,7 +248,7 @@ public final class TargetIndex {
 
         if ordered != targets {
             targets = ordered
-            search = SearchIndex(ordered)
+            search = SearchIndex(ordered, frecency: { [history] in history.frecency($0.historyKey) })
         }
     }
 

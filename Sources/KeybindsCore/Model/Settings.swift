@@ -6,13 +6,24 @@ public struct Settings: Codable, Equatable, Sendable {
     public var doubleTap: DoubleTapTiming
     /// Optional key combo that also opens the palette.
     public var paletteCombo: KeyCombo?
+    /// While one of these apps is frontmost the combo is released, so the app gets the keystroke (e.g. ⌘K).
+    public var comboExcludedBundleIDs: [String]
+    /// Tab sources switched off by the user: "chromium", "safari", "terminal". Their apps show windows instead.
+    public var disabledTabSources: Set<String>
+    /// List installed apps that aren't running, so typing a name can launch them.
+    public var showNotRunningApps: Bool
 
-    public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil)
+    public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil,
+                                           comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true)
 
-    public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?) {
+    public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?,
+                comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool) {
         self.doubleShiftEnabled = doubleShiftEnabled
         self.doubleTap = doubleTap
         self.paletteCombo = paletteCombo
+        self.comboExcludedBundleIDs = comboExcludedBundleIDs
+        self.disabledTabSources = disabledTabSources
+        self.showNotRunningApps = showNotRunningApps
     }
 
     // Missing keys fall back to defaults, so older settings files keep loading as fields are added.
@@ -22,5 +33,8 @@ public struct Settings: Codable, Equatable, Sendable {
         doubleShiftEnabled = try c.decodeIfPresent(Bool.self, forKey: .doubleShiftEnabled) ?? d.doubleShiftEnabled
         doubleTap = try c.decodeIfPresent(DoubleTapTiming.self, forKey: .doubleTap) ?? d.doubleTap
         paletteCombo = try c.decodeIfPresent(KeyCombo.self, forKey: .paletteCombo)
+        comboExcludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .comboExcludedBundleIDs) ?? d.comboExcludedBundleIDs
+        disabledTabSources = try c.decodeIfPresent(Set<String>.self, forKey: .disabledTabSources) ?? d.disabledTabSources
+        showNotRunningApps = try c.decodeIfPresent(Bool.self, forKey: .showNotRunningApps) ?? d.showNotRunningApps
     }
 }

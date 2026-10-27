@@ -9,6 +9,7 @@ final class PaletteModel {
     static let maxResults = 60
 
     let index: TargetIndex
+    let favicons: FaviconStore
     var query = "" { didSet { selectedID = nil } }
     /// The selected target, by identity: rows reorder while scans land, and an index would drift onto a neighbor.
     /// nil means "the first result".
@@ -16,8 +17,9 @@ final class PaletteModel {
     /// Bumped on every show so the view can re-focus the search field.
     var showCount = 0
 
-    init(index: TargetIndex) {
+    init(index: TargetIndex, favicons: FaviconStore) {
         self.index = index
+        self.favicons = favicons
     }
 
     var results: [RankedTarget] {
@@ -49,9 +51,10 @@ final class PaletteController: NSObject, NSWindowDelegate {
     private let activator: Activator
     private lazy var panel: PalettePanel = makePanel()
     private var keyMonitor: Any?
+    var onOpenSettings: () -> Void = {}
 
-    init(index: TargetIndex) {
-        model = PaletteModel(index: index)
+    init(index: TargetIndex, favicons: FaviconStore) {
+        model = PaletteModel(index: index, favicons: favicons)
         activator = Activator(index: index)
         super.init()
     }
@@ -135,14 +138,20 @@ final class PaletteController: NSObject, NSWindowDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let keyCode = event.keyCode
             let control = event.modifierFlags.contains(.control)
-            let consumed = MainActor.assumeIsolated { self?.handleKey(keyCode, control: control) ?? false }
+            let command = event.modifierFlags.contains(.command)
+            let consumed = MainActor.assumeIsolated { self?.handleKey(keyCode, control: control, command: command) ?? false }
             return consumed ? nil : event
         }
     }
 
     /// Returns true when the key was handled and shouldn't reach the search field.
-    private func handleKey(_ keyCode: UInt16, control: Bool) -> Bool {
+    private func handleKey(_ keyCode: UInt16, control: Bool, command: Bool) -> Bool {
         guard panel.isKeyWindow else { return false }
+        if command && keyCode == 43 {  // ⌘,
+            hide()
+            onOpenSettings()
+            return true
+        }
         switch (keyCode, control) {
         case (53, _):  // Esc
             hide()

@@ -21,7 +21,7 @@ struct ScriptTab: Sendable {
     let tty: String?
 }
 
-enum TabSource: Sendable {
+enum TabSource: String, Sendable {
     case chromium, safari, terminal
 
     static func forBundle(_ bundleID: String?) -> TabSource? {

@@ -4,37 +4,43 @@ import KeybindsPlatform
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var settings = Settings.default
+    private let settingsModel = SettingsModel()
     private let index = TargetIndex()
-    private lazy var palette = PaletteController(index: index)
+    private let favicons = FaviconStore()
+    private lazy var palette = PaletteController(index: index, favicons: favicons)
+    private lazy var settingsWindow = SettingsWindowController(model: settingsModel)
     private var hotkeys: HotkeyManager!
     private var menuBar: MenuBarController!
     private var onboarding: OnboardingWindowController?
     private var permissionPoll: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        do {
-            settings = try SettingsStore().load()
-        } catch {
-            Log.app.error("settings.json unreadable, using defaults: \(error.localizedDescription)")
-        }
-
+        let settings = settingsModel.settings
         hotkeys = HotkeyManager(settings: settings) { [weak self] in self?.palette.toggle() }
+        hotkeys.apply(settings)
+        index.apply(settings)
+
+        settingsModel.onChange = { [weak self] settings in
+            guard let self else { return }
+            hotkeys.apply(settings)
+            index.apply(settings)
+            settingsModel.comboError = hotkeys.comboError
+        }
+        settingsModel.onRecordingChange = { [weak self] recording in self?.hotkeys.setPaused(recording) }
+        settingsModel.comboError = hotkeys.comboError
+
         menuBar = MenuBarController(
             openPalette: { [weak self] in self?.palette.show() },
+            showSettings: { [weak self] in self?.settingsWindow.show() },
             showPermissions: { [weak self] in self?.showOnboarding() }
         )
-
-        // Combos are Carbon hotkeys and work without any permission.
-        hotkeys.startCombo()
+        palette.onOpenSettings = { [weak self] in self?.settingsWindow.show() }
 
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         Log.app.notice("launched v\(version, privacy: .public), accessibility granted: \(Permissions.accessibilityGranted)")
 
-        index.refresh()
-
         if Permissions.accessibilityGranted {
-            hotkeys.startDoubleShift()
+            hotkeys.accessibilityGranted()
         } else {
             showOnboarding()
             waitForAccessibility()
@@ -54,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.permissionPoll?.invalidate()
                 self?.permissionPoll = nil
                 Log.app.notice("Accessibility granted")
-                self?.hotkeys.startDoubleShift()
+                self?.hotkeys.accessibilityGranted()
                 self?.index.refresh()
             }
         }

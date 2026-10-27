@@ -4,10 +4,12 @@ import AppKit
 final class MenuBarController: NSObject {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let openPalette: () -> Void
+    private let showSettings: () -> Void
     private let showPermissions: () -> Void
 
-    init(openPalette: @escaping () -> Void, showPermissions: @escaping () -> Void) {
+    init(openPalette: @escaping () -> Void, showSettings: @escaping () -> Void, showPermissions: @escaping () -> Void) {
         self.openPalette = openPalette
+        self.showSettings = showSettings
         self.showPermissions = showPermissions
         super.init()
 
@@ -17,6 +19,7 @@ final class MenuBarController: NSObject {
 
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Palette  (⇧⇧)", action: #selector(openPaletteAction), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(settingsAction), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Permissions…", action: #selector(permissionsAction), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Keybinds", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -24,5 +27,6 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func openPaletteAction() { openPalette() }
+    @objc private func settingsAction() { showSettings() }
     @objc private func permissionsAction() { showPermissions() }
 }

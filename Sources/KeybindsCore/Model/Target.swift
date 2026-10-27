@@ -8,6 +8,8 @@ public enum TargetKind: String, Sendable {
 public enum Locator: Hashable, Sendable {
     case app(pid: Int32)
     case window(pid: Int32, windowID: UInt32)
+    /// An installed app that isn't running.
+    case launch(path: String)
     // Scripted window/tab ids are kept as text: recent Chrome returns them as text, and comparing
     // them as numbers in AppleScript silently never matches.
 
@@ -35,6 +37,7 @@ public struct Target: Identifiable, Hashable, Sendable {
                 bundleID: String?, pid: Int32, url: String? = nil, locator: Locator) {
         switch locator {
         case .app(let pid): id = "app:\(pid)"
+        case .launch(let path): id = "launch:\(path)"
         case .window(_, let windowID): id = "win:\(windowID)"
         case .chromiumTab(let bundleID, _, let tabID): id = "tab:\(bundleID):\(tabID)"
         case .safariTab(let windowID, let tabIndex, _): id = "safari:\(windowID):\(tabIndex)"
@@ -48,5 +51,23 @@ public struct Target: Identifiable, Hashable, Sendable {
         self.bundleID = bundleID
         self.pid = pid
         self.locator = locator
+    }
+}
+
+extension Target {
+    /// Identity that survives restarts, for usage history: pids, window ids and tab ids don't.
+    public var historyKey: String {
+        switch kind {
+        case .browserTab:
+            // Ignore #fragments so in-page navigation counts as the same page.
+            let page = url.map { $0.split(separator: "#", maxSplits: 1).first.map(String.init) ?? $0 } ?? title
+            return "tab:\(page)"
+        case .terminalTab:
+            return "term:\(title)"
+        case .window:
+            return "win:\(bundleID ?? appName):\(title)"
+        case .app:
+            return "app:\(bundleID ?? appName)"
+        }
     }
 }
