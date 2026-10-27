@@ -56,13 +56,17 @@ guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEve
 }
 CFRunLoopAddSource(CFRunLoopGetCurrent(), CFMachPortCreateRunLoopSource(nil, tap, 0), .commonModes)
 CGEvent.tapEnable(tap: tap, enable: true)
-print("Recording for \(Int(seconds))s. Type normally (anywhere), and do a few deliberate double-Shift taps. Only timings are recorded.\nEach detected double-Shift prints immediately; the full analysis prints at the end. Ctrl-C to abort.")
+print("Recording for \(Int(seconds))s. Type normally (anywhere), and do a few deliberate double-Shift taps. Only timings are recorded.\nEach detected double-Shift prints immediately; the full analysis prints at the end. Ctrl-C to stop early (the analysis still prints).")
 fflush(stdout)
 let started = Date()
 let ticker = Timer(timeInterval: 30, repeats: true) { _ in
     print(String(format: "  … %.0fs elapsed, %d keys recorded", Date().timeIntervalSince(started), keyCount)); fflush(stdout)
 }
 RunLoop.current.add(ticker, forMode: .default)
+signal(SIGINT, SIG_IGN)
+let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+sigint.setEventHandler { print("\n  Stopped early — analyzing what was recorded."); CFRunLoopStop(CFRunLoopGetMain()) }
+sigint.resume()
 CFRunLoopRunInMode(.defaultMode, seconds, false)
 
 let keyDowns = events.filter { if case .keyDown = $0 { return true }; return false }.count
