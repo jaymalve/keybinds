@@ -11,12 +11,22 @@ var otherMods: CGEventFlags = []
 let otherMask: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskSecondaryFn, .maskAlphaShift]
 var holds: [Double] = [], gaps: [Double] = []
 var lastShiftDown = 0.0, lastShiftUp = -1.0
+var live = DoubleTapDetector()
+var firstT: Double? = nil
+var keyCount = 0
 
 let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
 let callback: CGEventTapCallBack = { _, type, event, _ in
     let t = Double(event.timestamp) / 1e9
+    if firstT == nil { firstT = t }
+    let before = events.count
+    defer {
+        for e in events[before...] where live.handle(e) {
+            print(String(format: "  ⇧⇧ double-Shift detected at %.1fs", t - firstT!)); fflush(stdout)
+        }
+    }
     if type == .keyDown {
-        events.append(.keyDown(t))
+        events.append(.keyDown(t)); keyCount += 1
     } else if type == .flagsChanged {
         let flags = event.flags
         let shift = flags.contains(.maskShift)
@@ -46,7 +56,13 @@ guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEve
 }
 CFRunLoopAddSource(CFRunLoopGetCurrent(), CFMachPortCreateRunLoopSource(nil, tap, 0), .commonModes)
 CGEvent.tapEnable(tap: tap, enable: true)
-print("Recording for \(Int(seconds))s. Type normally (anywhere), and do a few deliberate double-Shift taps. Only timings are recorded.")
+print("Recording for \(Int(seconds))s. Type normally (anywhere), and do a few deliberate double-Shift taps. Only timings are recorded.\nEach detected double-Shift prints immediately; the full analysis prints at the end. Ctrl-C to abort.")
+fflush(stdout)
+let started = Date()
+let ticker = Timer(timeInterval: 30, repeats: true) { _ in
+    print(String(format: "  … %.0fs elapsed, %d keys recorded", Date().timeIntervalSince(started), keyCount)); fflush(stdout)
+}
+RunLoop.current.add(ticker, forMode: .default)
 CFRunLoopRunInMode(.defaultMode, seconds, false)
 
 let keyDowns = events.filter { if case .keyDown = $0 { return true }; return false }.count
