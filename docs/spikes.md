@@ -7,7 +7,7 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 | 1a | Browser tab enumeration latency | ✅ Done |
 | 1b | Read Chromium `Favicons` DB while Chrome runs | ✅ Done |
 | 2 | AX windows across Spaces / fullscreen / minimized | ✅ Done: plain AX misses other Spaces; remote tokens fix it. Needs a hidden-window filter |
-| 3 | Tab activation in a background window on another Space | ⏳ Interactive, do together |
+| 3 | Tab activation in a background window on another Space | 🟡 Window part ✅ (in M2); tab part moves to M3 |
 | 4a | Terminal tab label (process + cwd) from tty | ✅ Done |
 | 4b | Terminal tab enumeration via AppleScript; closing one tab | ✅ Enumeration done; closing a tab still open |
 | 5 | Stable self-signed cert keeps TCC grants across rebuilds | ✅ Done (in M1) |
@@ -81,6 +81,16 @@ Run: ~90 s, 255 key presses, 4 deliberate double-Shifts, Shift also used for cap
 - Designated requirement: `identifier "com.jaymalve.keybinds" and certificate leaf = H"011a51c2…"`. It depends only on the bundle ID and the cert, not on the binary.
 - Verified: after granting Accessibility once, two rebuilds with real code changes launched with `accessibility granted: true`, with no re-prompt.
 - Gotcha: in zsh, `log` is a shell builtin. Use `/usr/bin/log show --predicate 'subsystem == "com.jaymalve.keybinds"'`.
+
+## 3. Switching across Spaces — 🟡 (windows ✅, tabs in M3)
+Verified in the M2 app (`Activator`: `_SLPSSetFrontProcessWithOptions` + synthesized make-key event + `AXRaise`):
+
+- ✅ Window on another Space: switches Space and focuses the exact window.
+- ✅ Fullscreen app: switches to its Space.
+- ✅ Minimized window: unminimized and focused.
+- ✅ App with no windows (Notes, Messages): activated.
+- ✅ Empty query + Enter returns to the previously used window (the current one is listed last).
+- Still open: activating a specific **tab** in a background browser window on another Space. Tested in M3.
 
 ## 1b. Chromium favicons — ✅
 `spikes/favicons_db.swift`
