@@ -107,6 +107,10 @@ scripts/
 ```
 **Build tooling note:** this machine has only the Command Line Tools (Swift 6.2), not Xcode. The plan uses **SwiftPM plus a small `bundle.sh`** that assembles the `.app`, which works without Xcode. Installing Xcode later only adds SwiftUI previews and Instruments, which are nice but not required.
 
+**Tests:** the CLT ship neither XCTest nor Swift Testing, so `KeybindsCoreTests` is a small executable with its own `test`/`expect` helpers: `swift run KeybindsCoreTests`. Move to Swift Testing if Xcode is installed.
+
+**Dev loop:** `scripts/make-dev-cert.sh` once, then `scripts/bundle.sh --run` (build, bundle, sign, relaunch).
+
 ### 3.2 Core model
 ```swift
 enum TargetKind { case app, window, browserTab, terminalTab }
@@ -183,7 +187,7 @@ Two mechanisms, both owned by `HotkeyManager`:
 - Known limitation: macOS hides key events from other apps while secure input is on (password fields), so the double tap doesn't fire there. That's acceptable.
 
 **B. Key combos (alternative palette hotkey + all direct bindings)**
-- Use **[sindresorhus/KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)** (MIT, SwiftPM). It wraps Carbon `RegisterEventHotKey` and includes a recorder UI. It needs no special permission and handles conflicts.
+- A small in-repo Carbon wrapper (`CarbonHotKey`, `RegisterEventHotKey`). It needs no permission and has no dependencies. *(M1: chosen over [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) to keep the CLT-only build dependency-free; revisit that library for its recorder UI in M4.)*
 - Binding hotkeys are registered dynamically from `bindings.json`.
 - Settings offers the palette trigger as **"Double Shift" (preset)**, **a recorded combo**, or both.
 - **If you pick `⌘K`:** a global combo takes `⌘K` away from *every* app. Apps that use it include Terminal (clear scrollback), Cursor/VS Code (chord prefix and inline edit), Chrome (search from the address bar), and Slack/Notion/Linear. Mitigation: a **per-app exclusion list**. While an excluded app is frontmost, the combo is **unregistered** (driven by the `didActivateApplication` notification), so `⌘K` reaches that app normally.
