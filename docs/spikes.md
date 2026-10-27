@@ -4,17 +4,32 @@ Throwaway code lives in `spikes/`. Each section below records what we measured a
 
 | # | Spike | Status |
 |---|---|---|
-| 1a | Browser tab enumeration latency | ⏳ Needs Automation permission (run from Terminal) |
+| 1a | Browser tab enumeration latency | ✅ Steady state done; cold first call to re-check |
 | 1b | Read Chromium `Favicons` DB while Chrome runs | ✅ Done |
 | 2 | AX windows across Spaces / fullscreen / minimized | ⏳ Needs Accessibility permission (run from Terminal) |
 | 3 | Tab activation in a background window on another Space | ⏳ Interactive, do together |
 | 4a | Terminal tab label (process + cwd) from tty | ✅ Done |
-| 4b | Terminal tab enumeration via AppleScript; closing one tab | ⏳ Needs Automation permission |
+| 4b | Terminal tab enumeration via AppleScript; closing one tab | ✅ Enumeration done; closing a tab still open |
 | 5 | Stable self-signed cert keeps TCC grants across rebuilds | ⏳ Interactive (Keychain), do together |
 | 6a | Double-Shift detector logic | ✅ Done (synthetic tests) |
 | 6b | Double-Shift on real typing | ⏳ Needs Input Monitoring (run from Terminal) |
 
 ---
+
+## 1a / 4b. Tab enumeration via AppleScript — ✅ (steady state)
+`spikes/tabs_latency.swift`: one batched Apple Event per app, compiled `NSAppleScript`, 5 runs each.
+
+| App | Windows | Tabs | First call | Median | Max after first |
+|---|---|---|---|---|---|
+| Chrome | 5 | 24 | 1,675 ms | **33 ms** | — |
+| Safari | 1 | 13 | 1,892 ms | **5 ms** | — |
+| Terminal | 5 | 5 | 27 ms | **25 ms** | 42 ms |
+| Brave | — | — | not running, skipped (never launched) | | |
+
+- Steady state is far under the 150 ms target, so batching works.
+- **The first call took ~1.7–1.9 s** for Chrome and Safari. That run also showed the Automation prompts, so it most likely includes the time spent clicking OK. Re-run to separate that from a genuine cold-start cost (loading the app's scripting dictionary).
+  - If the cold cost is real, it doesn't change the design: the stale-while-revalidate index (§3.4) does one warm-up enumeration per app at launch and when the app is first seen, never on the palette-open path.
+- Only 24 Chrome tabs were open; the 100+ tab case is still unmeasured. Batching should keep it sublinear; re-check once we have the real app.
 
 ## 1b. Chromium favicons — ✅
 `spikes/favicons_db.swift`
