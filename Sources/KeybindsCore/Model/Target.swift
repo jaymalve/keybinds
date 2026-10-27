@@ -8,12 +8,15 @@ public enum TargetKind: String, Sendable {
 public enum Locator: Hashable, Sendable {
     case app(pid: Int32)
     case window(pid: Int32, windowID: UInt32)
+    // Scripted window/tab ids are kept as text: recent Chrome returns them as text, and comparing
+    // them as numbers in AppleScript silently never matches.
+
     /// Chrome-family tab ids are stable for the tab's lifetime.
-    case chromiumTab(bundleID: String, windowID: Int, tabID: Int)
+    case chromiumTab(bundleID: String, windowID: String, tabID: String)
     /// Safari tabs have no ids: index plus the URL, re-checked before switching.
-    case safariTab(windowID: Int, tabIndex: Int, url: String?)
+    case safariTab(windowID: String, tabIndex: Int, url: String?)
     /// The tty identifies a Terminal tab for as long as it's open.
-    case terminalTab(windowID: Int, tabIndex: Int, tty: String)
+    case terminalTab(windowID: String, tabIndex: Int, tty: String)
 }
 
 /// One row in the palette: something you can jump to.

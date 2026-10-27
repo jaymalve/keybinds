@@ -42,13 +42,15 @@ public struct Activator {
 
     /// Select the tab first, then focus its window. If the window couldn't be matched to a CGWindowID,
     /// raise it through AppleScript and activate the app instead.
-    private func activateTab(_ selector: TabSelector, scriptWindowID: Int, bundleID: String,
+    private func activateTab(_ selector: TabSelector, scriptWindowID: String, bundleID: String,
                              target: Target, app: NSRunningApplication?) {
         let cgWindow = index.cgWindowID(pid: target.pid, scriptWindowID: scriptWindowID)
         let scanner = index.tabScanner
         Task {
             do {
-                try await scanner.select(selector, bundleID: bundleID)
+                if try await !scanner.select(selector, bundleID: bundleID) {
+                    log.error("tab not found for \(target.id, privacy: .public); it may have been closed")
+                }
             } catch {
                 log.error("selecting tab failed: \(String(describing: error), privacy: .public)")
             }

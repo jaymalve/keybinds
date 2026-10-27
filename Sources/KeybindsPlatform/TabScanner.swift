@@ -5,7 +5,7 @@ private let tabLog = Logger(subsystem: "com.jaymalve.keybinds", category: "tabs"
 
 /// One scripted window and its tabs, as the app's AppleScript dictionary reports them.
 struct ScriptWindow: Sendable {
-    let id: Int
+    let id: String
     /// Window title; used to match the window to its AX element / CGWindowID.
     let name: String
     /// 1-based index of the selected tab.
@@ -15,7 +15,7 @@ struct ScriptWindow: Sendable {
 
 struct ScriptTab: Sendable {
     let index: Int
-    let chromiumID: Int?
+    let chromiumID: String?
     let title: String
     let url: String?
     let tty: String?
@@ -68,10 +68,10 @@ final class TabScanner: Sendable {
             return ids.indices.map { w in
                 let tIDs = tabIDs[safe: w]?.items ?? [], tTitles = titles[safe: w]?.items ?? [], tURLs = urls[safe: w]?.items ?? []
                 let tabs = tIDs.indices.map { t in
-                    ScriptTab(index: t + 1, chromiumID: tIDs[t].int, title: tTitles[safe: t]?.text ?? "",
+                    ScriptTab(index: t + 1, chromiumID: tIDs[t].text, title: tTitles[safe: t]?.text ?? "",
                               url: tURLs[safe: t]?.text, tty: nil)
                 }
-                return ScriptWindow(id: ids[w].int, name: names[safe: w]?.text ?? "",
+                return ScriptWindow(id: ids[w].text ?? "", name: names[safe: w]?.text ?? "",
                                     activeIndex: active[safe: w]?.int ?? 1, tabs: tabs)
             }
         }
@@ -96,7 +96,7 @@ final class TabScanner: Sendable {
         """
         return try await runner.run(source, app: bundleID, cache: true) { r in
             r.items.compactMap { w in
-                guard w.atIndex(1)?.int != -1 else {
+                guard w.atIndex(1)?.text != "-1" else {
                     tabLog.debug("Safari window skipped: \(w.atIndex(2)?.text ?? "?", privacy: .public)")
                     return nil
                 }
@@ -105,7 +105,7 @@ final class TabScanner: Sendable {
                     ScriptTab(index: t + 1, chromiumID: nil, title: names[t].text ?? "",
                               url: urls[safe: t]?.text, tty: nil)
                 }
-                return ScriptWindow(id: w.atIndex(1)?.int ?? 0, name: w.atIndex(2)?.text ?? "",
+                return ScriptWindow(id: w.atIndex(1)?.text ?? "", name: w.atIndex(2)?.text ?? "",
                                     activeIndex: w.atIndex(3)?.int ?? 1, tabs: tabs)
             }
         }
@@ -129,7 +129,7 @@ final class TabScanner: Sendable {
                     ScriptTab(index: t + 1, chromiumID: nil, title: tTitles[safe: t]?.text ?? "", url: nil, tty: tTTYs[t].text)
                 }
                 let active = (tSelected.firstIndex { $0.booleanValue } ?? 0) + 1
-                return ScriptWindow(id: ids[w].int, name: names[safe: w]?.text ?? "", activeIndex: active, tabs: tabs)
+                return ScriptWindow(id: ids[w].text ?? "", name: names[safe: w]?.text ?? "", activeIndex: active, tabs: tabs)
             }
         }
     }
@@ -137,75 +137,90 @@ final class TabScanner: Sendable {
     // MARK: Select
 
     /// Makes the tab current inside its window. Bringing the window forward is the Activator's job.
-    func select(_ locator: TabSelector, bundleID: String) async throws {
-        let app = AppleScriptRunner.quoted(bundleID)
-        let source: String
+    /// Returns false if the window or tab no longer exists.
+    func select(_ locator: TabSelector, bundleID: String) async throws -> Bool {
+        let body: String
         switch locator {
         case .chromium(let windowID, let tabID):
-            source = """
-            with timeout of 2 seconds
-                tell application id \(app)
-                    set w to window id \(windowID)
-                    set i to 1
-                    repeat with t in tabs of w
-                        if id of t is \(tabID) then
-                            set active tab index of w to i
-                            exit repeat
-                        end if
-                        set i to i + 1
-                    end repeat
-                end tell
-            end timeout
+            body = """
+            \(Self.findWindow(windowID))
+            set i to 1
+            repeat with t in tabs of w
+                if (id of t as text) is \(AppleScriptRunner.quoted(tabID)) then
+                    set active tab index of w to i
+                    return true
+                end if
+                set i to i + 1
+            end repeat
+            return false
             """
         case .safari(let windowID, let tabIndex, let url):
             // Tabs may have moved since the scan: prefer the URL, fall back to the index.
             let match = url.map { "if URL of tab i of w is \(AppleScriptRunner.quoted($0)) then" } ?? "if i is \(tabIndex) then"
-            source = """
-            with timeout of 2 seconds
-                tell application id \(app)
-                    set w to window id \(windowID)
-                    repeat with i from 1 to count of tabs of w
-                        \(match)
-                            set current tab of w to tab i of w
-                            exit repeat
-                        end if
-                    end repeat
-                end tell
-            end timeout
+            body = """
+            \(Self.findWindow(windowID))
+            repeat with i from 1 to count of tabs of w
+                \(match)
+                    set current tab of w to tab i of w
+                    return true
+                end if
+            end repeat
+            return false
             """
         case .terminal(let windowID, let tty):
-            source = """
-            with timeout of 2 seconds
-                tell application id \(app)
-                    set w to window id \(windowID)
-                    repeat with t in tabs of w
-                        if tty of t is \(AppleScriptRunner.quoted(tty)) then
-                            set selected tab of w to t
-                            exit repeat
-                        end if
-                    end repeat
-                end tell
-            end timeout
+            body = """
+            \(Self.findWindow(windowID))
+            repeat with t in tabs of w
+                if tty of t is \(AppleScriptRunner.quoted(tty)) then
+                    set selected tab of w to t
+                    return true
+                end if
+            end repeat
+            return false
             """
         }
-        _ = try await runner.run(source, app: bundleID) { _ in true }
+        return try await runner.run(Self.wrap(body, bundleID), app: bundleID) { $0.booleanValue }
     }
 
     /// Fallback when the window's CGWindowID is unknown: raise it inside the app via AppleScript.
-    func raise(windowID: Int, bundleID: String) async throws {
-        let source = """
+    func raise(windowID: String, bundleID: String) async throws {
+        let body = """
+        \(Self.findWindow(windowID))
+        set index of w to 1
+        return true
+        """
+        _ = try await runner.run(Self.wrap(body, bundleID), app: bundleID) { $0.booleanValue }
+    }
+
+    /// Sets `w` to the window whose id, as text, matches; returns false from the script if there's none.
+    private static func findWindow(_ windowID: String) -> String {
+        """
+        set w to missing value
+        repeat with x in windows
+            if (id of x as text) is \(AppleScriptRunner.quoted(windowID)) then
+                set w to contents of x
+                exit repeat
+            end if
+        end repeat
+        if w is missing value then return false
+        """
+    }
+
+    private static func wrap(_ body: String, _ bundleID: String) -> String {
+        """
         with timeout of 2 seconds
-            tell application id \(AppleScriptRunner.quoted(bundleID)) to set index of window id \(windowID) to 1
+            tell application id \(AppleScriptRunner.quoted(bundleID))
+        \(body)
+            end tell
         end timeout
         """
-        _ = try await runner.run(source, app: bundleID) { _ in true }
     }
 }
 
 enum TabSelector: Sendable {
-    case chromium(windowID: Int, tabID: Int)
-    case safari(windowID: Int, tabIndex: Int, url: String?)
-    case terminal(windowID: Int, tty: String)
+    case chromium(windowID: String, tabID: String)
+    case safari(windowID: String, tabIndex: Int, url: String?)
+    case terminal(windowID: String, tty: String)
 }
 
 extension Array {

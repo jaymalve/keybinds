@@ -39,7 +39,7 @@ public final class TargetIndex {
 
     struct ScriptWindowKey: Hashable {
         let pid: pid_t
-        let windowID: Int
+        let windowID: String
     }
 
     public init() {
@@ -124,7 +124,7 @@ public final class TargetIndex {
         windowElements[windowID]?.element
     }
 
-    func cgWindowID(pid: pid_t, scriptWindowID: Int) -> CGWindowID? {
+    func cgWindowID(pid: pid_t, scriptWindowID: String) -> CGWindowID? {
         scriptWindowMap[ScriptWindowKey(pid: pid, windowID: scriptWindowID)]
     }
 
