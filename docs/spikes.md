@@ -138,3 +138,34 @@ cd ~/.t3/projects/keybinds/spikes
 Paste the outputs back into the session. The binaries are git-ignored; rebuild with `swiftc -O <name>.swift -o <name>`. `shift_recorder` has top-level code plus a second file, so build it with `cp shift_recorder.swift /tmp/main.swift && swiftc -O DoubleTapDetector.swift /tmp/main.swift -o shift_recorder`.
 
 Privacy: `shift_recorder` records only event *timings* and whether a key was Shift, another modifier, or a regular key. No characters or key codes are recorded, and nothing is written to disk.
+
+---
+
+## 7. Finding clickable elements (M6, Homerow/Shortcat) — ✅ mostly
+`Sources/KeybindsApp/AXSpike.swift` on branch `m6-spike`. It runs inside Keybinds.app because the app already has Accessibility: `open -n build/Keybinds.app --env KB_AX_SPIKE=1`, then read `/tmp/axspike/results.txt`.
+
+It walks the focused window's AX tree and counts visible elements with a clickable role. **Naive** makes one call per attribute and no pruning. **Batched** makes one `AXUIElementCopyMultipleAttributeValues` call per element (role, children, position, size, visible children/rows) and skips subtrees outside the window. **Parallel** is batched with the top subtrees walked concurrently. Times are medians of 3 warm runs; **cold** is the first batched run.
+
+| App | Nodes | Clickable | Cold | Naive | Batched | Parallel |
+|---|---:|---:|---:|---:|---:|---:|
+| Finder (Downloads) | 121 | 43 | 49 ms | 92 ms | **15 ms** | 11 ms |
+| Notes | 127 | 57 | 145 ms | **2790 ms** | **15 ms** | 11 ms |
+| System Settings | 134 | 79 | 801 ms | 341 ms | **50 ms** | 42 ms |
+| WhatsApp | 83 | 27 | 84 ms | 67 ms | **41 ms** | 40 ms |
+| ChatGPT | 426 | 102 | 86 ms | 55 ms | **52 ms** | 50 ms |
+| T3 Code (Electron) | 791 | 79 | 60 ms | 99 ms | **49 ms** | 47 ms |
+| Cursor (Electron) | 605 | 85 | 126 ms | 58 ms | **65 ms** | 66 ms |
+| Claude (Electron) | 960 | 151 | 189 ms | 103 ms | **119 ms** | 123 ms |
+| Chrome (x.com home) | 1638 | 191 | 144 ms | 134 ms | **127 ms** | 125 ms |
+| Spotify (CEF) | 17 | 3 | 59 ms | 4 ms | 3 ms | 3 ms |
+
+Findings:
+- **Batched calls with pruning are required.** Naive walking took 2.8 s in Notes and 341 ms in System Settings, because it enters every row of long lists. Batched takes 11–50 ms in native apps.
+- **Parallel doesn't help.** The target app answers AX requests one at a time, so the cost is about 0.08 ms per element no matter how many threads ask.
+- **Chrome and Electron cost 50–130 ms**, roughly proportional to element count, so they're just over the 100 ms goal. Gmail and Slack will be heavier. Options: cache the tree per window and refresh it with AX notifications; draw labels as they're found; or, in browsers, read the page with JavaScript.
+- **Cold runs are slower**: 800 ms in System Settings, and 60–190 ms in Electron apps right after accessibility is turned on. Prefetching when an app becomes active hides this.
+- **Electron**: setting `AXManualAccessibility` succeeded in Cursor, Claude and T3 Code, and their full web content showed up.
+- **Chrome**: setting `AXEnhancedUserInterface` returned -25208 (not implemented), but the web content was already exposed (191 clickable elements). Chrome turns on its tree when an assistive app is detected. Re-check this on a fresh Chrome launch.
+- **Spotify** rejected `AXManualAccessibility` (-25205) and exposes only 17 elements. That makes it a case for the text-recognition or grid fallback.
+- **JavaScript in Chrome is off by default** ("Allow JavaScript from Apple Events"), so the faster web path would be opt-in.
+- Not measured: Safari, Music, Messages and Docker had no window on this Space. Slack and Xcode weren't running.
