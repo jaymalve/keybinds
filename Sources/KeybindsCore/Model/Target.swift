@@ -71,3 +71,19 @@ extension Target {
         }
     }
 }
+
+extension Target {
+    /// Same page regardless of #fragment or a trailing slash; nil for anything that isn't a browser tab.
+    public var pageKey: String? {
+        guard kind == .browserTab, let url, !url.isEmpty else { return nil }
+        var page = url.split(separator: "#", maxSplits: 1).first.map(String.init) ?? url
+        if page.hasSuffix("/") { page.removeLast() }
+        return page
+    }
+
+    /// The tab's website, without "www.", for grouping.
+    public var siteKey: String? {
+        guard kind == .browserTab, let host = url.flatMap({ URL(string: $0)?.host() }), !host.isEmpty else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+}

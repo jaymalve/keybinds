@@ -12,18 +12,23 @@ public struct Settings: Codable, Equatable, Sendable {
     public var disabledTabSources: Set<String>
     /// List installed apps that aren't running, so typing a name can launch them.
     public var showNotRunningApps: Bool
+    /// Group browser tabs by website, and fold copies of the same page into one row.
+    public var groupTabs: Bool
 
     public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil,
-                                           comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true)
+                                           comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true,
+                                           groupTabs: false)
 
     public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?,
-                comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool) {
+                comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool,
+                groupTabs: Bool) {
         self.doubleShiftEnabled = doubleShiftEnabled
         self.doubleTap = doubleTap
         self.paletteCombo = paletteCombo
         self.comboExcludedBundleIDs = comboExcludedBundleIDs
         self.disabledTabSources = disabledTabSources
         self.showNotRunningApps = showNotRunningApps
+        self.groupTabs = groupTabs
     }
 
     // Missing keys fall back to defaults, so older settings files keep loading as fields are added.
@@ -36,5 +41,6 @@ public struct Settings: Codable, Equatable, Sendable {
         comboExcludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .comboExcludedBundleIDs) ?? d.comboExcludedBundleIDs
         disabledTabSources = try c.decodeIfPresent(Set<String>.self, forKey: .disabledTabSources) ?? d.disabledTabSources
         showNotRunningApps = try c.decodeIfPresent(Bool.self, forKey: .showNotRunningApps) ?? d.showNotRunningApps
+        groupTabs = try c.decodeIfPresent(Bool.self, forKey: .groupTabs) ?? d.groupTabs
     }
 }

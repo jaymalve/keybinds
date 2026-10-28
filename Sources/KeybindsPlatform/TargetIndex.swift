@@ -38,10 +38,24 @@ public final class TargetIndex {
     @ObservationIgnored private var scanningWindows = false
     @ObservationIgnored private var rescanWindows = false
     @ObservationIgnored private var scanningTabs = Set<pid_t>()
+    /// Apps whose tabs changed while a scan was in flight: scan again when it lands.
+    @ObservationIgnored private var rescanTabs = Set<pid_t>()
+    /// Rows being closed, hidden until a scan that started after the close confirms they're gone.
+    @ObservationIgnored private var hidden: [String: Hidden] = [:]
     /// Apps whose Automation permission was denied: not asked again until relaunch.
     @ObservationIgnored private var tabsDenied = Set<String>()
     @ObservationIgnored private var debounce: Task<Void, Never>?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+
+    struct Hidden {
+        let pid: pid_t
+        let since = Date()
+        /// When the close finished; scans that started after this show the truth.
+        var closedAt = Date.distantFuture
+    }
+
+    /// Safety net: a hidden row comes back after this long whatever happened.
+    private static let hideLimit: TimeInterval = 15
 
     struct ScriptWindowKey: Hashable {
         let pid: pid_t
@@ -112,6 +126,7 @@ public final class TargetIndex {
             let start = Date()
             let windows = await Task.detached(priority: .userInitiated) { scanner.scan(apps) }.value
             self.windows = windows
+            self.hidden = self.hidden.filter { !$0.key.hasPrefix("win:") || $0.value.closedAt > start }
             self.zOrder = Self.onScreenZOrder()
             self.windowElements = Dictionary(windows.map { ($0.windowID, $0.element) }, uniquingKeysWith: { a, _ in a })
             self.rebuild()
@@ -126,7 +141,7 @@ public final class TargetIndex {
 
     /// One in-flight scan per app; a slow app never delays the others.
     private func refreshTabs(_ app: AppInfo, bundleID: String, source: TabSource) {
-        guard scanningTabs.insert(app.pid).inserted else { return }
+        guard scanningTabs.insert(app.pid).inserted else { rescanTabs.insert(app.pid); return }
         let scanner = tabScanner
         Task {
             let start = Date()
@@ -137,6 +152,7 @@ public final class TargetIndex {
                     self.terminalLabels = await Task.detached { TerminalLabels.labels(for: ttys) }.value
                 }
                 self.tabs[app.pid] = scripted
+                self.hidden = self.hidden.filter { $0.value.pid != app.pid || $0.key.hasPrefix("win:") || $0.value.closedAt > start }
                 log.debug("tabs: \(app.name, privacy: .public) \(scripted.reduce(0) { $0 + $1.tabs.count }) in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
                 guard !self.settings.disabledTabSources.contains(source.rawValue) else {
                     self.tabs[app.pid] = nil
@@ -152,7 +168,28 @@ public final class TargetIndex {
             }
             self.scanningTabs.remove(app.pid)
             self.rebuild()
+            if self.rescanTabs.remove(app.pid) != nil { self.refreshTabs(app, bundleID: bundleID, source: source) }
         }
+    }
+
+    /// Hides rows right away while they're being closed, so the palette updates instantly.
+    public func hide(_ targets: [Target]) {
+        for t in targets where hidden[t.id] == nil { hidden[t.id] = Hidden(pid: t.pid) }
+        rebuild()
+    }
+
+    /// The close attempt is over. Failed rows come back now; closed ones stay hidden until a fresh scan.
+    public func closeFinished(_ targets: [Target], closed: Bool) {
+        for t in targets {
+            if closed { hidden[t.id]?.closedAt = Date() } else { hidden[t.id] = nil }
+        }
+        if !closed { rebuild() }
+        scheduleRefresh()
+    }
+
+    /// The foreground process of a Terminal tab, from the last label scan.
+    func terminalProcess(tty: String) -> String? {
+        terminalLabels[tty]?.process
     }
 
     func element(for windowID: CGWindowID) -> AXUIElement? {
@@ -239,7 +276,9 @@ public final class TargetIndex {
         }
 
         keyed.sort { $0.key < $1.key }
-        var ordered = keyed.map(\.target)
+        let now = Date()
+        hidden = hidden.filter { now.timeIntervalSince($0.value.since) < Self.hideLimit }
+        var ordered = keyed.map(\.target).filter { hidden[$0.id] == nil }
 
         // The first entry is where you are right now; move it last so Enter means "go back" (like ⌘Tab).
         if let first = ordered.first, first.pid == NSWorkspace.shared.frontmostApplication?.processIdentifier {

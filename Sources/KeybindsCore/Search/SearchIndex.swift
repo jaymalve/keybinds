@@ -38,6 +38,13 @@ public struct SearchIndex: Sendable {
         }
     }
 
+    /// True when the query has no search words, only an optional scope prefix: the palette is browsing.
+    public static func isBrowsing(_ query: String) -> Bool {
+        var q = query.lowercased()
+        if q.count >= 2, q.dropFirst().first == " ", scopes[String(q.prefix(1))] != nil { q = String(q.dropFirst(2)) }
+        return q.allSatisfy(\.isWhitespace)
+    }
+
     public func search(_ rawQuery: String) -> [RankedTarget] {
         var query = rawQuery.lowercased()
         var kinds: Set<TargetKind>?

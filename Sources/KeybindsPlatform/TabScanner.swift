@@ -182,6 +182,51 @@ final class TabScanner: Sendable {
         return try await runner.run(Self.wrap(body, bundleID), app: bundleID) { $0.booleanValue }
     }
 
+    /// Closes a browser tab in the background. Returns false if it no longer exists.
+    /// Terminal can't close a tab via AppleScript; `Closer` uses its Close Tab menu item instead.
+    func close(_ locator: TabSelector, bundleID: String) async throws -> Bool {
+        let body: String
+        switch locator {
+        case .chromium(let windowID, let tabID):
+            body = """
+            \(Self.findWindow(windowID))
+            repeat with t in tabs of w
+                if (id of t as text) is \(AppleScriptRunner.quoted(tabID)) then
+                    close t
+                    return true
+                end if
+            end repeat
+            return false
+            """
+        case .safari(let windowID, let tabIndex, let url):
+            // Check the scanned index first (copies of one page share a URL), then look by URL.
+            let check = url.map { "URL of tab i of w is \(AppleScriptRunner.quoted($0))" } ?? "true"
+            let search = url.map { """
+                repeat with j from 1 to count of tabs of w
+                    if URL of tab j of w is \(AppleScriptRunner.quoted($0)) then
+                        close tab j of w
+                        return true
+                    end if
+                end repeat
+                """ } ?? ""
+            body = """
+            \(Self.findWindow(windowID))
+            set i to \(tabIndex)
+            if i ≤ (count of tabs of w) then
+                if \(check) then
+                    close tab i of w
+                    return true
+                end if
+            end if
+            \(search)
+            return false
+            """
+        case .terminal:
+            return false
+        }
+        return try await runner.run(Self.wrap(body, bundleID), app: bundleID) { $0.booleanValue }
+    }
+
     /// Fallback when the window's CGWindowID is unknown: raise it inside the app via AppleScript.
     func raise(windowID: String, bundleID: String) async throws {
         let body = """

@@ -6,40 +6,75 @@ import SwiftUI
 @MainActor
 @Observable
 final class PaletteModel {
-    static let maxResults = 60
+    static let maxRows = 80
+
+    /// A line in the footer: a question ("press ⌘W again…") or a result. `key` identifies what a
+    /// repeated keypress would confirm.
+    struct Message {
+        let key: String?
+        let text: String
+    }
 
     let index: TargetIndex
     let favicons: FaviconStore
-    var query = "" { didSet { selectedID = nil } }
-    /// The selected target, by identity: rows reorder while scans land, and an index would drift onto a neighbor.
-    /// nil means "the first result".
-    var selectedID: String?
+    var query = "" { didSet { selectedID = nil; message = nil } }
+    /// The selected row, by identity: rows reorder while scans land, and an index would drift onto a neighbor.
+    /// nil means "the first row".
+    var selectedID: String? { didSet { if selectedID != oldValue, message?.key != nil { message = nil } } }
     /// Bumped on every show so the view can re-focus the search field.
     var showCount = 0
+    var message: Message?
+    /// Settings → group tabs by website and fold duplicates.
+    var groupTabs = false
+    var expandedSites = Set<String>()
 
     init(index: TargetIndex, favicons: FaviconStore) {
         self.index = index
         self.favicons = favicons
     }
 
-    var results: [RankedTarget] {
-        Array(index.search.search(query).prefix(Self.maxResults))
+    var browsing: Bool { SearchIndex.isBrowsing(query) }
+
+    var rows: [PaletteRow] {
+        let rows = PaletteRows.build(index.search.search(query), collapseDuplicates: groupTabs,
+                                     groupBySite: groupTabs && browsing, expanded: expandedSites)
+        return Array(rows.prefix(Self.maxRows))
     }
 
-    func selectedIndex(in results: [RankedTarget]) -> Int {
-        selectedID.flatMap { id in results.firstIndex { $0.id == id } } ?? 0
+    /// Every copy of a page except the most recent one, across all open tabs.
+    var duplicateExtras: [Target] {
+        PaletteRows.duplicateTabs(index.targets).flatMap { $0.dropFirst() }
     }
 
-    var selectedTarget: Target? {
-        let results = results
-        return results.isEmpty ? nil : results[selectedIndex(in: results)].target
+    func selectedIndex(in rows: [PaletteRow]) -> Int {
+        selectedID.flatMap { id in rows.firstIndex { $0.id == id } } ?? 0
+    }
+
+    var selectedRow: PaletteRow? {
+        let rows = rows
+        return rows.isEmpty ? nil : rows[selectedIndex(in: rows)]
     }
 
     func moveSelection(by delta: Int) {
-        let results = results
-        guard !results.isEmpty else { return }
-        let next = (selectedIndex(in: results) + delta + results.count) % results.count
-        selectedID = results[next].id
+        let rows = rows
+        guard !rows.isEmpty else { return }
+        let next = (selectedIndex(in: rows) + delta + rows.count) % rows.count
+        selectedID = rows[next].id
+    }
+
+    /// Before rows disappear, move the selection to the next row that stays (or the previous one).
+    func selectNeighbor(removing ids: Set<String>) {
+        let rows = rows
+        let current = selectedIndex(in: rows)
+        guard rows.indices.contains(current), ids.contains(rows[current].id) else { return }
+        let after = rows[(current + 1)...].first { !ids.contains($0.id) }
+        let before = rows[..<current].last { !ids.contains($0.id) }
+        selectedID = (after ?? before)?.id
+    }
+
+    func setExpanded(_ site: String, _ expanded: Bool) {
+        if expanded { expandedSites.insert(site) } else { expandedSites.remove(site) }
+        selectedID = "site:\(site)"
     }
 }
 
@@ -49,6 +84,7 @@ final class PaletteController: NSObject, NSWindowDelegate {
 
     private let model: PaletteModel
     private let activator: Activator
+    private let closer: Closer
     private lazy var panel: PalettePanel = makePanel()
     private var keyMonitor: Any?
     var onOpenSettings: () -> Void = {}
@@ -56,10 +92,15 @@ final class PaletteController: NSObject, NSWindowDelegate {
     init(index: TargetIndex, favicons: FaviconStore) {
         model = PaletteModel(index: index, favicons: favicons)
         activator = Activator(index: index)
+        closer = Closer(index: index)
         super.init()
     }
 
     var isVisible: Bool { panel.isVisible }
+
+    func apply(_ settings: KeybindsCore.Settings) {
+        model.groupTabs = settings.groupTabs
+    }
 
     func toggle() {
         isVisible ? hide() : show()
@@ -69,6 +110,8 @@ final class PaletteController: NSObject, NSWindowDelegate {
         model.index.refresh()
         model.query = ""
         model.selectedID = nil
+        model.message = nil
+        model.expandedSites = []
         model.showCount += 1
         panel.setFrame(frameOnActiveScreen(), display: false)
         panel.makeKeyAndOrderFront(nil)
@@ -102,8 +145,8 @@ final class PaletteController: NSObject, NSWindowDelegate {
         background.layer?.cornerRadius = 14
         background.layer?.masksToBounds = true
 
-        let hosting = NSHostingView(rootView: PaletteView(model: model) { [weak self] target in
-            self?.open(target)
+        let hosting = NSHostingView(rootView: PaletteView(model: model) { [weak self] row in
+            self?.open(row)
         })
         hosting.translatesAutoresizingMaskIntoConstraints = false
         background.addSubview(hosting)
@@ -127,10 +170,16 @@ final class PaletteController: NSObject, NSWindowDelegate {
                       width: Self.size.width, height: Self.size.height)
     }
 
-    /// Hide first so the panel gives up key focus before the target takes it.
-    private func open(_ target: Target) {
-        hide()
-        activator.activate(target)
+    /// Hide first so the panel gives up key focus before the target takes it. A website heading
+    /// opens and closes instead.
+    private func open(_ row: PaletteRow) {
+        switch row.content {
+        case .target(let r):
+            hide()
+            activator.activate(r.target)
+        case .site(let site, _):
+            model.setExpanded(site, !model.expandedSites.contains(site))
+        }
     }
 
     private func installKeyMonitor() {
@@ -139,17 +188,27 @@ final class PaletteController: NSObject, NSWindowDelegate {
             let keyCode = event.keyCode
             let control = event.modifierFlags.contains(.control)
             let command = event.modifierFlags.contains(.command)
-            let consumed = MainActor.assumeIsolated { self?.handleKey(keyCode, control: control, command: command) ?? false }
+            let shift = event.modifierFlags.contains(.shift)
+            let consumed = MainActor.assumeIsolated {
+                self?.handleKey(keyCode, control: control, command: command, shift: shift) ?? false
+            }
             return consumed ? nil : event
         }
     }
 
     /// Returns true when the key was handled and shouldn't reach the search field.
-    private func handleKey(_ keyCode: UInt16, control: Bool, command: Bool) -> Bool {
+    private func handleKey(_ keyCode: UInt16, control: Bool, command: Bool, shift: Bool) -> Bool {
         guard panel.isKeyWindow else { return false }
-        if command && keyCode == 43 {  // ⌘,
-            hide()
-            onOpenSettings()
+        if command {
+            switch (keyCode, shift) {
+            case (43, _):  // ⌘,
+                hide()
+                onOpenSettings()
+            case (13, true): closeDuplicates()  // ⌘⇧W
+            case (13, false): closeSelected()   // ⌘W
+            case (12, false): quitSelected()    // ⌘Q
+            default: return false  // ⌘A, ⌘C, ⌘V… go to the search field
+            }
             return true
         }
         switch (keyCode, control) {
@@ -160,12 +219,103 @@ final class PaletteController: NSObject, NSWindowDelegate {
         case (126, _), (35, true):  // ↑, ⌃P
             model.moveSelection(by: -1)
         case (36, _), (76, _):  // Return, keypad Enter
-            guard let target = model.selectedTarget else { return true }
-            open(target)
+            if let row = model.selectedRow { open(row) }
+        case (124, _), (123, _):  // → ←: open and close website groups; otherwise move the text cursor
+            return expandOrCollapse(right: keyCode == 124)
         default:
             return false
         }
         return true
+    }
+
+    private func expandOrCollapse(right: Bool) -> Bool {
+        guard let row = model.selectedRow else { return false }
+        switch row.content {
+        case .site(let site, _):
+            guard right != model.expandedSites.contains(site) else { return false }
+            model.setExpanded(site, right)
+        case .target(let r):
+            guard !right, row.indented, let site = r.target.siteKey else { return false }
+            model.setExpanded(site, false)
+        }
+        return true
+    }
+
+    // MARK: - Close and quit
+
+    private func closeSelected() {
+        guard let row = model.selectedRow else { return }
+        switch row.content {
+        case .site(let site, _):
+            let targets = row.allTargets
+            guard confirm("close:\(row.id)", "Press ⌘W again to close all \(targets.count) \(site) tabs") else { return }
+            close(targets, rowIDs: [row.id])
+        case .target(let r):
+            let target = r.target
+            if target.kind == .app {
+                NSSound.beep()
+                model.message = PaletteModel.Message(key: nil, text: "Apps can't be closed with ⌘W. ⌘Q quits \(target.appName).")
+                return
+            }
+            if closer.busyProcess(target) != nil {
+                // Terminal asks before ending a running process: switch to the tab so its question is visible.
+                hide()
+                activator.activate(target)
+                Task { _ = await closer.close(target) }
+                return
+            }
+            close([target], rowIDs: [row.id])
+        }
+    }
+
+    /// Keeps the most recent copy of each page and closes the rest.
+    private func closeDuplicates() {
+        // Safari tabs are found by index: close from the end of each window so earlier indexes don't shift.
+        let extras = model.duplicateExtras.sorted { a, b in
+            if case .safariTab(let wa, let ia, _) = a.locator, case .safariTab(let wb, let ib, _) = b.locator, wa == wb {
+                return ia > ib
+            }
+            return false
+        }
+        guard !extras.isEmpty else { NSSound.beep(); return }
+        close(extras, rowIDs: Set(extras.map(\.id)))
+    }
+
+    private func quitSelected() {
+        guard let target = model.selectedRow?.allTargets.first, target.pid > 0 else { NSSound.beep(); return }
+        guard confirm("quit:\(target.pid)", "Press ⌘Q again to quit \(target.appName)") else { return }
+        let all = model.index.targets.filter { $0.pid == target.pid }
+        model.selectNeighbor(removing: Set(all.map(\.id)))
+        model.index.hide(all)
+        model.index.closeFinished(all, closed: closer.quit(pid: target.pid))
+    }
+
+    /// Hides the rows right away, then closes one by one in the background.
+    private func close(_ targets: [Target], rowIDs: Set<String>) {
+        model.selectNeighbor(removing: rowIDs)
+        model.index.hide(targets)
+        Task {
+            var closed: [Target] = [], failed: [Target] = []
+            for target in targets {
+                if await closer.close(target) { closed.append(target) } else { failed.append(target) }
+            }
+            model.index.closeFinished(closed, closed: true)
+            model.index.closeFinished(failed, closed: false)
+            if !failed.isEmpty {
+                let what = failed.count == 1 ? "“\(failed[0].title)”" : "\(failed.count) items"
+                model.message = PaletteModel.Message(key: nil, text: "Couldn't close \(what)")
+            }
+        }
+    }
+
+    /// Destructive actions need the same key twice in a row; the first press explains what will happen.
+    private func confirm(_ key: String, _ question: String) -> Bool {
+        if model.message?.key == key {
+            model.message = nil
+            return true
+        }
+        model.message = PaletteModel.Message(key: key, text: question)
+        return false
     }
 
     private func removeKeyMonitor() {

@@ -19,11 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys = HotkeyManager(settings: settings) { [weak self] in self?.palette.toggle() }
         hotkeys.apply(settings)
         index.apply(settings)
+        palette.apply(settings)
 
         settingsModel.onChange = { [weak self] settings in
             guard let self else { return }
             hotkeys.apply(settings)
             index.apply(settings)
+            palette.apply(settings)
             settingsModel.comboError = hotkeys.comboError
         }
         settingsModel.onRecordingChange = { [weak self] recording in self?.hotkeys.setPaused(recording) }

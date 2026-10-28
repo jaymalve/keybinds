@@ -92,6 +92,9 @@ struct SettingsView: View {
                 sourceToggle("Terminal tabs", "terminal")
                 Text("Apps with tabs switched off show their windows instead.")
                     .font(.callout).foregroundStyle(.secondary)
+                Toggle("Group tabs by website", isOn: $model.settings.groupTabs)
+                Text("Websites with several tabs show as one row you can expand (→). Copies of the same page fold into one row.")
+                    .font(.callout).foregroundStyle(.secondary)
             }
 
             Section("Apps") {
