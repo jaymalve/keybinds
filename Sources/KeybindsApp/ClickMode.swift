@@ -72,7 +72,12 @@ final class ClickMode {
                 return HintOverlayView.Hint(label: hint.label, frame: cocoa.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY))
             }
             guard !overlay.view.hints.isEmpty else { continue }
+            overlay.alphaValue = 0
             overlay.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.12
+                overlay.animator().alphaValue = 1
+            }
             overlays.append(overlay)
         }
         // Switching apps (⌘Tab, a click elsewhere) ends click mode.
@@ -203,6 +208,8 @@ final class HintOverlay: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Draws the labels as small glass capsules, and once you start typing, a soft outline around the elements
+/// still in play.
 final class HintOverlayView: NSView {
     struct Hint {
         let label: String
@@ -210,32 +217,127 @@ final class HintOverlayView: NSView {
         let frame: CGRect
     }
 
-    var hints: [Hint] = [] { didSet { needsDisplay = true } }
-    var typed = "" { didSet { needsDisplay = true } }
+    var hints: [Hint] = [] { didSet { rebuild() } }
+    var typed = "" { didSet { refresh() } }
 
-    private static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .bold)
-    private static let text = NSColor(white: 0.08, alpha: 1)
-    private static let typedText = NSColor(white: 0.08, alpha: 0.35)
-    private static let fill = NSColor(red: 1.0, green: 0.85, blue: 0.35, alpha: 0.96)
-    private static let border = NSColor(white: 0, alpha: 0.35)
+    private var chips: [HintChip] = []
 
     override func draw(_ dirtyRect: NSRect) {
+        guard !typed.isEmpty else { return }
         for hint in hints where hint.label.hasPrefix(typed) {
-            let label = hint.label.uppercased()
-            let string = NSMutableAttributedString(string: label, attributes: [.font: Self.font, .foregroundColor: Self.text])
-            string.addAttribute(.foregroundColor, value: Self.typedText, range: NSRange(location: 0, length: typed.count))
-            let size = string.size()
-            let pill = CGSize(width: size.width + 8, height: size.height + 2)
-            // Inside the element at its left edge, vertically centered; small elements get the label centered.
-            let x = hint.frame.width < pill.width * 2.5 ? hint.frame.midX - pill.width / 2 : hint.frame.minX + 2
-            let rect = CGRect(x: x, y: hint.frame.midY - pill.height / 2, width: pill.width, height: pill.height).integral
-            let path = NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4)
-            Self.fill.setFill()
+            let path = NSBezierPath(roundedRect: hint.frame.insetBy(dx: -2, dy: -2), xRadius: 6, yRadius: 6)
+            NSColor.white.withAlphaComponent(0.06).setFill()
             path.fill()
-            Self.border.setStroke()
-            path.lineWidth = 0.5
+            NSColor.white.withAlphaComponent(0.55).setStroke()
+            path.lineWidth = 1.5
             path.stroke()
-            string.draw(at: CGPoint(x: rect.minX + 4, y: rect.minY + 1))
         }
+    }
+
+    private func rebuild() {
+        chips.forEach { $0.removeFromSuperview() }
+        chips = hints.map { hint in
+            let chip = HintChip(label: hint.label)
+            let size = chip.fittingSize
+            // Just left of the element so its text stays readable, overlapping it a little; small elements
+            // (icons) get the label centered on them.
+            let x = hint.frame.width < size.width * 2.5 ? hint.frame.midX - size.width / 2
+                : max(2, hint.frame.minX - size.width + 6)
+            chip.frame = CGRect(x: x, y: hint.frame.midY - size.height / 2, width: size.width, height: size.height).integral
+            addSubview(chip)
+            return chip
+        }
+        refresh()
+    }
+
+    private func refresh() {
+        for (chip, hint) in zip(chips, hints) {
+            chip.isHidden = !hint.label.hasPrefix(typed)
+            if !chip.isHidden { chip.typedCount = typed.count }
+        }
+        needsDisplay = true
+    }
+}
+
+/// One label: Liquid Glass on macOS 26, a dark frosted blur before that.
+final class HintChip: NSView {
+    private let label: String
+    private let text = NSTextField(labelWithString: "")
+    private static let height: CGFloat = 20
+
+    var typedCount = 0 { didSet { if typedCount != oldValue { updateText() } } }
+
+    private static let font: NSFont = {
+        let base = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        return NSFont(descriptor: base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor, size: 11.5) ?? base
+    }()
+
+    init(label: String) {
+        self.label = label.uppercased()
+        super.init(frame: .zero)
+        appearance = NSAppearance(named: .darkAqua)
+        let background: NSView
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = Self.height / 2
+            glass.tintColor = NSColor.black.withAlphaComponent(0.35)
+            background = glass
+        } else {
+            let blur = NSVisualEffectView()
+            blur.material = .hudWindow
+            blur.blendingMode = .behindWindow
+            blur.state = .active
+            blur.wantsLayer = true
+            blur.layer?.cornerRadius = Self.height / 2
+            blur.layer?.masksToBounds = true
+            blur.layer?.borderWidth = 0.5
+            blur.layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+            background = blur
+        }
+        // Glass adapts to what's behind it and turns pale over white pages; a dark capsule underneath keeps every
+        // label equally legible.
+        let backing = NSView()
+        backing.wantsLayer = true
+        backing.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.5).cgColor
+        backing.layer?.cornerRadius = Self.height / 2
+        backing.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(backing)
+        background.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(background)
+        text.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(text)
+        NSLayoutConstraint.activate([
+            backing.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backing.trailingAnchor.constraint(equalTo: trailingAnchor),
+            backing.topAnchor.constraint(equalTo: topAnchor),
+            backing.bottomAnchor.constraint(equalTo: bottomAnchor),
+            background.leadingAnchor.constraint(equalTo: leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: trailingAnchor),
+            background.topAnchor.constraint(equalTo: topAnchor),
+            background.bottomAnchor.constraint(equalTo: bottomAnchor),
+            text.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
+            text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
+            text.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: Self.height),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: Self.height),
+        ])
+        wantsLayer = true
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.3
+        layer?.shadowRadius = 4
+        layer?.shadowOffset = CGSize(width: 0, height: -1)
+        updateText()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func updateText() {
+        let string = NSMutableAttributedString(string: label, attributes: [
+            .font: Self.font, .foregroundColor: NSColor.white, .kern: 0.6,
+        ])
+        string.addAttribute(.foregroundColor, value: NSColor.white.withAlphaComponent(0.35),
+                            range: NSRange(location: 0, length: min(typedCount, label.count)))
+        text.attributedStringValue = string
+        text.alignment = .center
     }
 }
