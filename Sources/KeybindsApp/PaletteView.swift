@@ -89,7 +89,7 @@ struct PaletteView: View {
             Image(systemName: "square.on.square")
             Text("\(count) duplicate \(count == 1 ? "tab" : "tabs") open")
             Spacer()
-            Text("⌘⇧W closes the extra copies").foregroundStyle(.secondary)
+            Text("⌘⇧⌫ closes the extra copies").foregroundStyle(.secondary)
         }
         .font(.callout)
         .padding(.horizontal, 18)
@@ -99,9 +99,9 @@ struct PaletteView: View {
 
     private func hints(_ row: PaletteRow?) -> String {
         if case .site(let site, _)? = row?.content {
-            return model.expandedSites.contains(site) ? "← collapse   ⌘W close all   esc" : "→ expand   ⌘W close all   esc"
+            return model.expandedSites.contains(site) ? "← collapse   ⌘⌫ close all   esc" : "→ expand   ⌘⌫ close all   esc"
         }
-        return "t/w/a␣ filter   ↩ open   ⌘W close   ⌘Q quit   esc"
+        return "t/w/a␣ filter   ↩ open   ⌘⌫ close   ⌘Q quit   esc"
     }
 
     private var summary: String {

@@ -8,7 +8,7 @@ import SwiftUI
 final class PaletteModel {
     static let maxRows = 80
 
-    /// A line in the footer: a question ("press ⌘W again…") or a result. `key` identifies what a
+    /// A line in the footer: a question ("press ⌘⌫ again…") or a result. `key` identifies what a
     /// repeated keypress would confirm.
     struct Message {
         let key: String?
@@ -204,8 +204,9 @@ final class PaletteController: NSObject, NSWindowDelegate {
             case (43, _):  // ⌘,
                 hide()
                 onOpenSettings()
-            case (13, true): closeDuplicates()  // ⌘⇧W
-            case (13, false): closeSelected()   // ⌘W
+            // ⌘⌫ closes whatever is selected (tab or window); it replaces the field's delete-to-start-of-line.
+            case (51, true): closeDuplicates()  // ⌘⇧⌫
+            case (51, false): closeSelected()   // ⌘⌫
             case (12, false): quitSelected()    // ⌘Q
             default: return false  // ⌘A, ⌘C, ⌘V… go to the search field
             }
@@ -248,13 +249,13 @@ final class PaletteController: NSObject, NSWindowDelegate {
         switch row.content {
         case .site(let site, _):
             let targets = row.allTargets
-            guard confirm("close:\(row.id)", "Press ⌘W again to close all \(targets.count) \(site) tabs") else { return }
+            guard confirm("close:\(row.id)", "Press ⌘⌫ again to close all \(targets.count) \(site) tabs") else { return }
             close(targets, rowIDs: [row.id])
         case .target(let r):
             let target = r.target
             if target.kind == .app {
                 NSSound.beep()
-                model.message = PaletteModel.Message(key: nil, text: "Apps can't be closed with ⌘W. ⌘Q quits \(target.appName).")
+                model.message = PaletteModel.Message(key: nil, text: "Apps can't be closed with ⌘⌫. ⌘Q quits \(target.appName).")
                 return
             }
             if closer.busyProcess(target) != nil {
