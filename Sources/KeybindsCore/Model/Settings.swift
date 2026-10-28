@@ -16,14 +16,16 @@ public struct Settings: Codable, Equatable, Sendable {
     public var groupTabs: Bool
     /// Files and folders: recently used ones plus a live Spotlight search as you type.
     public var searchFiles: Bool
+    /// Optional key combo that puts click labels on the front window (the palette's Tab does the same).
+    public var clickCombo: KeyCombo?
 
     public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil,
                                            comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true,
-                                           groupTabs: false, searchFiles: true)
+                                           groupTabs: false, searchFiles: true, clickCombo: nil)
 
     public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?,
                 comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool,
-                groupTabs: Bool, searchFiles: Bool) {
+                groupTabs: Bool, searchFiles: Bool, clickCombo: KeyCombo?) {
         self.doubleShiftEnabled = doubleShiftEnabled
         self.doubleTap = doubleTap
         self.paletteCombo = paletteCombo
@@ -32,6 +34,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.showNotRunningApps = showNotRunningApps
         self.groupTabs = groupTabs
         self.searchFiles = searchFiles
+        self.clickCombo = clickCombo
     }
 
     // Missing keys fall back to defaults, so older settings files keep loading as fields are added.
@@ -46,5 +49,6 @@ public struct Settings: Codable, Equatable, Sendable {
         showNotRunningApps = try c.decodeIfPresent(Bool.self, forKey: .showNotRunningApps) ?? d.showNotRunningApps
         groupTabs = try c.decodeIfPresent(Bool.self, forKey: .groupTabs) ?? d.groupTabs
         searchFiles = try c.decodeIfPresent(Bool.self, forKey: .searchFiles) ?? d.searchFiles
+        clickCombo = try c.decodeIfPresent(KeyCombo.self, forKey: .clickCombo)
     }
 }

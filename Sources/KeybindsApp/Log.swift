@@ -4,4 +4,5 @@ import OSLog
 enum Log {
     static let app = Logger(subsystem: "com.jaymalve.keybinds", category: "app")
     static let hotkey = Logger(subsystem: "com.jaymalve.keybinds", category: "hotkey")
+    static let click = Logger(subsystem: "com.jaymalve.keybinds", category: "click")
 }

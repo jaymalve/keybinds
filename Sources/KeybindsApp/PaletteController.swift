@@ -116,6 +116,8 @@ final class PaletteController: NSObject, NSWindowDelegate {
     private lazy var panel: PalettePanel = makePanel()
     private var keyMonitor: Any?
     var onOpenSettings: () -> Void = {}
+    /// Tab: labels on the front window instead.
+    var onClickMode: () -> Void = {}
 
     init(index: TargetIndex, favicons: FaviconStore) {
         model = PaletteModel(index: index, favicons: favicons)
@@ -245,6 +247,8 @@ final class PaletteController: NSObject, NSWindowDelegate {
         switch (keyCode, control) {
         case (53, _):  // Esc
             hide()
+        case (48, _):  // Tab: click something in the front window
+            onClickMode()
         case (125, _), (45, true):  // ↓, ⌃N
             model.moveSelection(by: 1)
         case (126, _), (35, true):  // ↑, ⌃P

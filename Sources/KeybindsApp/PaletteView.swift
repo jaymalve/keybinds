@@ -104,7 +104,7 @@ struct PaletteView: View {
         if row?.target?.isFileSystem == true {
             return "↩ open   ⌘↩ show in Finder   ⌘⌫ trash   esc"
         }
-        return "t/w/a/f␣ filter   ↩ open   ⌘⌫ close   ⌘Q quit   esc"
+        return "t/w/a/f␣ filter   ↩ open   ⇥ click   ⌘⌫ close   ⌘Q quit   esc"
     }
 
     private var summary: String {
