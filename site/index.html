@@ -44,6 +44,8 @@
     --key-shadow: rgba(0,0,0,.5);
     --grain: .05;
     --solid: var(--obsidian);
+    --win: #1C1E23;
+    --win-bar: #24272D;
     color-scheme: dark;
   }
   :root[data-theme="light"] {
@@ -61,6 +63,8 @@
     --key-shadow: rgba(23,25,29,.16);
     --grain: .03;
     --solid: var(--snow);
+    --win: #FFFFFF;
+    --win-bar: #EEF0F3;
     color-scheme: light;
   }
   html, body, .palette, .toast, kbd, .btn { transition: background-color .4s var(--ease), color .4s var(--ease), border-color .4s; }
@@ -177,6 +181,45 @@
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 
+
+  /* ---------- Where a jump lands: a mock of the tab or window ---------- */
+  .stage {
+    position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: 24px;
+    background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease);
+  }
+  .stage.open { opacity: 1; pointer-events: auto; }
+  .mock {
+    width: min(760px, 94vw); height: min(460px, 72vh); display: flex; flex-direction: column; overflow: hidden;
+    border-radius: 14px; background: var(--win); border: 1px solid rgb(var(--tint) / .14);
+    box-shadow: 0 50px 140px var(--shadow), inset 0 1px 0 rgb(255 255 255 / .04);
+    transform: translateY(16px) scale(.96); transition: transform .45s var(--ease);
+  }
+  .stage.open .mock { transform: none; }
+  .titlebar { display: flex; align-items: center; gap: 14px; padding: 0 14px; height: 40px; background: var(--win-bar); flex: none; border-bottom: 1px solid rgb(var(--tint) / .08); }
+  .lights { display: flex; gap: 7px; flex: none; }
+  .lights i { width: 11px; height: 11px; border-radius: 50%; background: rgb(var(--tint) / .22); }
+  .titlebar .name2 { font-size: 12.5px; color: var(--muted); flex: 1; text-align: center; margin-right: 52px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabs { display: flex; gap: 4px; align-self: flex-end; min-width: 0; flex: 1; }
+  .tab {
+    font-size: 12px; color: var(--muted); padding: 7px 12px; border-radius: 8px 8px 0 0; min-width: 0; max-width: 170px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 7px;
+  }
+  .tab b { width: 14px; height: 14px; border-radius: 4px; flex: none; display: grid; place-items: center; font: 600 8px var(--sans); color: var(--obsidian); }
+  .tab.on { background: var(--win); color: var(--fg); }
+  .address { display: flex; align-items: center; gap: 10px; padding: 8px 14px; flex: none; border-bottom: 1px solid rgb(var(--tint) / .08); }
+  .address span { flex: 1; font: 12.5px var(--mono); color: var(--muted); background: rgb(var(--tint) / .06); padding: 6px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .address span em { font-style: normal; color: var(--fg); }
+  .page { flex: 1; padding: 28px 32px; display: grid; align-content: start; gap: 12px; }
+  .page h2 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; color: var(--fg); }
+  .page i { display: block; height: 9px; border-radius: 5px; background: rgb(var(--tint) / .08); }
+  .split { flex: 1; display: grid; grid-template-columns: 180px 1fr; }
+  .split aside { border-right: 1px solid rgb(var(--tint) / .08); padding: 20px 16px; display: grid; align-content: start; gap: 12px; }
+  .split aside i { display: block; height: 8px; border-radius: 4px; background: rgb(var(--tint) / .08); }
+  .term { flex: 1; background: #0C0D10; padding: 16px 18px; font: 12.5px/1.65 var(--mono); color: #C9CDD4; white-space: pre; overflow: hidden; }
+  .term .cursor { display: inline-block; width: 7px; height: 14px; background: #D8DCE3; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .stage .hint { position: fixed; bottom: 26px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--muted); }
+
   /* ---------- Theme toggle ---------- */
   .theme {
     position: fixed; top: 20px; right: 20px; z-index: 20; width: 38px; height: 38px; border-radius: 50%;
@@ -217,6 +260,8 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="stage" id="stage"><div class="mock" id="mock"></div><div class="hint">esc or ⇧⇧ to switch again</div></div>
+
 <div class="scrim" id="scrim"></div>
 <div class="palette" id="palette" role="dialog" aria-label="Keybinds demo">
   <div class="search">
@@ -230,17 +275,17 @@
 <script>
 // Everything the demo palette can jump to.
 const targets = [
-  { title: "Inbox (3)", sub: "mail.google.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "M" },
-  { title: "npm run dev — ~/keybinds", sub: "Terminal", kind: "Tab", c: "#8B9099", g: ">_" },
-  { title: "Landing page v3", sub: "Figma", kind: "Window", c: "#F7F8FA", g: "F" },
-  { title: "keybinds/PLAN.md", sub: "github.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "G" },
-  { title: "ssh prod-1 — ~", sub: "Terminal", kind: "Tab", c: "#8B9099", g: ">_" },
-  { title: "#design", sub: "Slack", kind: "Window", c: "#A9AEB7", g: "#" },
-  { title: "My issues", sub: "linear.app · Safari", kind: "Tab", c: "#D8DCE3", g: "L" },
-  { title: "Groceries", sub: "Notes", kind: "Window", c: "#F7F8FA", g: "N" },
-  { title: "lo-fi beats to code to", sub: "youtube.com · Chrome", kind: "Tab", c: "#A9AEB7", g: "▶" },
-  { title: "Q4 roadmap", sub: "docs.google.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "D" },
-  { title: "Spotify", sub: "Application", kind: "App", c: "#8B9099", g: "♪" },
+  { title: "Inbox (3)", sub: "mail.google.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "M", app: "Chrome", url: "mail.google.com/mail/u/0/#inbox" },
+  { title: "npm run dev — ~/keybinds", sub: "Terminal", kind: "Tab", c: "#8B9099", g: ">_", app: "Terminal", lines: ["~/keybinds $ npm run dev", "", "> keybinds-site@0.1.0 dev", "> next dev", "", "  ▲ Next.js 16.0.1", "  - Local:   http://localhost:3000", "", "  ✓ Ready in 812ms", "  ✓ Compiled / in 412ms"] },
+  { title: "Landing page v3", sub: "Figma", kind: "Window", c: "#F7F8FA", g: "F", app: "Figma" },
+  { title: "keybinds/PLAN.md", sub: "github.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "G", app: "Chrome", url: "github.com/jaymalve/keybinds/blob/main/docs/PLAN.md" },
+  { title: "ssh prod-1 — ~", sub: "Terminal", kind: "Tab", c: "#8B9099", g: ">_", app: "Terminal", lines: ["~ $ ssh prod-1", "Last login: Tue Oct 27 20:41:12 2026", "", "prod-1:~$ uptime", " 21:04  up 41 days,  2 users,  load average: 0.12 0.09 0.08", "prod-1:~$ systemctl status api --no-pager | head -3", "● api.service - API server", "     Active: active (running) since Mon 2026-09-16"] },
+  { title: "#design", sub: "Slack", kind: "Window", c: "#A9AEB7", g: "#", app: "Slack" },
+  { title: "My issues", sub: "linear.app · Safari", kind: "Tab", c: "#D8DCE3", g: "L", app: "Safari", url: "linear.app/keybinds/my-issues" },
+  { title: "Groceries", sub: "Notes", kind: "Window", c: "#F7F8FA", g: "N", app: "Notes" },
+  { title: "lo-fi beats to code to", sub: "youtube.com · Chrome", kind: "Tab", c: "#A9AEB7", g: "▶", app: "Chrome", url: "youtube.com/watch?v=jfKfPfyJRdk" },
+  { title: "Q4 roadmap", sub: "docs.google.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "D", app: "Chrome", url: "docs.google.com/document/d/q4-roadmap/edit" },
+  { title: "Spotify", sub: "Application", kind: "App", c: "#8B9099", g: "♪", app: "Spotify" },
 ];
 
 // ---------- Fuzzy match: letters in order; consecutive and word-start hits score higher ----------
@@ -303,6 +348,7 @@ function paint() {
 const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function open() {
+  leave();
   q.value = ""; sel = 0; render();
   palette.classList.add("open"); scrim.classList.add("open");
   setTimeout(() => q.focus(), 10);
@@ -312,9 +358,35 @@ function close() {
 }
 const isOpen = () => palette.classList.contains("open");
 
+// A jump lands on a mock of the real thing: the browser with that tab selected, the terminal, or the window.
+const stage = document.getElementById("stage"), mock = document.getElementById("mock");
 function jump(t) {
   close();
+  mock.innerHTML = t.url ? browser(t) : t.lines ? terminal(t) : windowOf(t);
+  stage.classList.remove("open"); void stage.offsetWidth; stage.classList.add("open");
   toast(`→ ${t.title}  ·  ${t.sub}`);
+}
+const leave = () => stage.classList.remove("open");
+stage.onclick = e => { if (!mock.contains(e.target)) leave(); };
+const lights = `<span class="lights"><i></i><i></i><i></i></span>`;
+const skeleton = n => Array.from({ length: n }, (_, i) => `<i style="width:${[92, 78, 85, 60, 88, 70, 45][i % 7]}%"></i>`).join("");
+function browser(t) {
+  const siblings = targets.filter(x => x.app === t.app && x.url && !x.closed);
+  const tabs = siblings.map(x => `<span class="tab${x === t ? " on" : ""}"><b style="background:${x.c}">${esc(x.g)}</b>${esc(x.title)}</span>`).join("");
+  const [host, ...path] = t.url.split("/");
+  return `<div class="titlebar">${lights}<span class="tabs">${tabs}</span></div>
+    <div class="address"><span><em>${esc(host)}</em>/${esc(path.join("/"))}</span></div>
+    <div class="page"><h2>${esc(t.title)}</h2>${skeleton(7)}</div>`;
+}
+function terminal(t) {
+  const body = t.lines.map(esc).join("\n");
+  return `<div class="titlebar">${lights}<span class="name2">${esc(t.title)}</span></div>
+    <div class="term">${body}\n<span class="cursor"></span></div>`;
+}
+function windowOf(t) {
+  const title = t.kind === "App" ? t.app : `${t.app} — ${t.title}`;
+  return `<div class="titlebar">${lights}<span class="name2">${esc(title)}</span></div>
+    <div class="split"><aside>${skeleton(6)}</aside><div class="page"><h2>${esc(t.kind === "App" ? t.app : t.title)}</h2>${skeleton(6)}</div></div>`;
 }
 function closeTarget(t) {
   t.closed = true;
@@ -351,7 +423,7 @@ addEventListener("keydown", e => {
     return;
   }
   dirty = true; lastTap = 0;
-  if (e.key === "Escape" && isOpen()) close();
+  if (e.key === "Escape") isOpen() ? close() : leave();
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); isOpen() ? close() : open(); }
 });
 addEventListener("keyup", e => {
