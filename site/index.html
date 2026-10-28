@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keybinds — every tab, every window, two keystrokes away</title>
+<meta name="description" content="Keybinds is a command palette for your whole Mac. Jump to any app, window, browser tab or terminal tab from the keyboard.">
+<link rel="icon" type="image/png" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/icon-512.png">
+<meta property="og:title" content="Keybinds">
+<meta property="og:description" content="Every tab, every window. Two keystrokes away.">
+<meta property="og:image" content="assets/icon-512.png">
+<style>
+  :root {
+    --obsidian: #17191D;
+    --ink: #0C0D10;
+    --graphite: #424853;
+    --silver: #D8DCE3;
+    --snow: #F7F8FA;
+    --muted: #8B9099;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", sans-serif;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(120% 90% at 50% 0%, #22252B 0%, var(--obsidian) 45%, var(--ink) 100%) fixed;
+    color: var(--snow);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  /* Film grain, very faint */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .05; z-index: 50;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ---------- The desktop: faint windows scattered around the edges ---------- */
+  .desk { position: fixed; inset: 0; z-index: 0; }
+  .win {
+    position: absolute; width: 230px; height: 150px; border-radius: 14px;
+    background: linear-gradient(160deg, rgba(216,220,227,.075), rgba(66,72,83,.05));
+    border: 1px solid rgba(216,220,227,.09);
+    transform: rotate(var(--r)) translate(var(--dx, 0), var(--dy, 0));
+    transition: transform .9s var(--ease), opacity .6s var(--ease), border-color .6s, box-shadow .6s, background .6s;
+    opacity: .75;
+    animation: drift 14s ease-in-out infinite alternate;
+    animation-delay: var(--delay);
+  }
+  @keyframes drift { to { translate: 0 -10px; } }
+  .win .bar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; }
+  .win .dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(216,220,227,.22); flex: none; }
+  .win .t { font-size: 11.5px; color: rgba(216,220,227,.42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .win .lines { padding: 4px 14px; display: grid; gap: 8px; }
+  .win .lines i { display: block; height: 6px; border-radius: 3px; background: rgba(216,220,227,.06); }
+  .win .lines i:nth-child(2) { width: 72%; } .win .lines i:nth-child(3) { width: 48%; }
+  .win.gone { opacity: 0; transform: rotate(var(--r)) scale(.85); }
+  .desk.focusing .win:not(.here) { opacity: .25; }
+  .win.here {
+    opacity: 1; z-index: 5;
+    border-color: rgba(247,248,250,.55);
+    background: linear-gradient(160deg, rgba(247,248,250,.16), rgba(66,72,83,.12));
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 6px rgba(216,220,227,.06);
+    transform: rotate(0deg) scale(1.12);
+    animation: none;
+  }
+  .win.here .t { color: var(--snow); }
+
+  /* ---------- Hero ---------- */
+  main {
+    position: relative; z-index: 10; height: 100%;
+    display: grid; place-items: center; text-align: center; padding: 24px;
+  }
+  .hero { max-width: 640px; display: grid; justify-items: center; }
+  .mark { width: 88px; height: 88px; filter: drop-shadow(0 18px 40px rgba(0,0,0,.6)); margin-bottom: 28px; }
+  .mark img { width: 100%; height: 100%; }
+  .mark:hover img { transform: rotate(-4deg) scale(1.04); }
+  .mark img { transition: transform .5s var(--ease); }
+  .name { font-size: 15px; letter-spacing: .02em; color: var(--muted); margin-bottom: 18px; }
+  h1 {
+    font-size: clamp(36px, 6vw, 60px); line-height: 1.04; letter-spacing: -.035em; font-weight: 600;
+    background: linear-gradient(180deg, var(--snow) 30%, #A9AEB7 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { margin-top: 18px; font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 460px; }
+  .lede b { color: var(--silver); font-weight: 500; }
+
+  /* The try-it line */
+  .try {
+    margin-top: 40px; display: inline-flex; align-items: center; gap: 12px;
+    font-size: 14px; color: var(--muted); background: none; border: 0; cursor: pointer; font-family: inherit;
+  }
+  .try:hover { color: var(--silver); }
+  .caps { display: inline-flex; gap: 6px; }
+  kbd {
+    font-family: var(--mono); font-size: 13px; color: var(--silver);
+    min-width: 30px; height: 30px; padding: 0 8px; display: inline-grid; place-items: center;
+    border-radius: 8px; border: 1px solid rgba(216,220,227,.16);
+    background: linear-gradient(180deg, rgba(216,220,227,.10), rgba(216,220,227,.03));
+    box-shadow: 0 2px 0 rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+    transition: transform .08s, box-shadow .08s, background .08s, color .08s;
+  }
+  .caps kbd { font-size: 16px; }
+  kbd.down { transform: translateY(2px); box-shadow: 0 0 0 rgba(0,0,0,.5); background: rgba(216,220,227,.22); color: var(--snow); }
+  .try .alt { opacity: .6; }
+
+  .cta { margin-top: 36px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    font-size: 14px; font-weight: 500; text-decoration: none; padding: 11px 18px; border-radius: 11px;
+    transition: transform .2s var(--ease), background .2s, border-color .2s;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn.primary { background: var(--snow); color: var(--obsidian); }
+  .btn.ghost { color: var(--silver); border: 1px solid rgba(216,220,227,.16); }
+  .btn.ghost:hover { border-color: rgba(216,220,227,.35); }
+
+  footer {
+    position: fixed; bottom: 22px; left: 0; right: 0; z-index: 10; text-align: center;
+    font-size: 12px; color: rgba(139,144,153,.7); letter-spacing: .01em;
+  }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; top: 26px; left: 50%; z-index: 40; transform: translate(-50%, -16px); opacity: 0;
+    font-size: 13px; color: var(--silver); padding: 9px 14px; border-radius: 999px;
+    background: rgba(23,25,29,.85); border: 1px solid rgba(216,220,227,.12); backdrop-filter: blur(12px);
+    transition: opacity .35s var(--ease), transform .35s var(--ease); pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ---------- The palette ---------- */
+  .scrim { position: fixed; inset: 0; z-index: 30; background: rgba(5,6,8,.35); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .palette {
+    position: fixed; z-index: 31; left: 50%; top: 16vh; width: min(620px, calc(100vw - 32px));
+    transform: translateX(-50%) scale(.97); opacity: 0; pointer-events: none;
+    background: rgba(28,30,35,.82); backdrop-filter: blur(28px) saturate(140%); -webkit-backdrop-filter: blur(28px) saturate(140%);
+    border: 1px solid rgba(216,220,227,.12); border-radius: 16px;
+    box-shadow: 0 40px 120px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05);
+    transition: opacity .16s var(--ease), transform .16s var(--ease); overflow: hidden;
+  }
+  .palette.open { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
+  .search { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid rgba(216,220,227,.08); }
+  .search svg { flex: none; opacity: .55; }
+  .search input {
+    flex: 1; background: none; border: 0; outline: 0; color: var(--snow);
+    font: 400 20px/1.2 var(--sans); caret-color: var(--silver);
+  }
+  .search input::placeholder { color: rgba(139,144,153,.75); }
+  .rows { list-style: none; padding: 8px; max-height: 330px; overflow-y: auto; scrollbar-width: none; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
+  .row.sel { background: rgba(216,220,227,.11); }
+  .ico {
+    width: 28px; height: 28px; border-radius: 7px; flex: none; display: grid; place-items: center;
+    font: 600 12px var(--sans); color: var(--obsidian);
+  }
+  .txt { min-width: 0; flex: 1; }
+  .ttl { font-size: 14px; color: var(--silver); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ttl mark { background: none; color: var(--snow); font-weight: 600; }
+  .sub { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 10.5px; color: var(--muted); padding: 2px 7px; border-radius: 5px; background: rgba(216,220,227,.07); flex: none; }
+  .empty { padding: 36px; text-align: center; color: var(--muted); font-size: 14px; }
+  .hints { display: flex; justify-content: space-between; padding: 9px 16px; font-size: 11.5px; color: rgba(139,144,153,.8); border-top: 1px solid rgba(216,220,227,.08); }
+
+  @media (max-width: 700px) {
+    .win { width: 170px; height: 112px; }
+    .try .alt { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="desk" id="desk"></div>
+
+<main>
+  <div class="hero">
+    <div class="mark"><img src="assets/icon.svg" alt="Keybinds app icon"></div>
+    <div class="name">Keybinds</div>
+    <h1>Every tab, every window.<br>Two keystrokes away.</h1>
+    <p class="lede">A command palette for your whole Mac. Jump to any app, window, <b>browser tab</b> or <b>terminal tab</b>, on any Space, without touching the mouse.</p>
+
+    <button class="try" id="try" aria-label="Open the demo palette">
+      <span class="caps"><kbd id="k1">⇧</kbd><kbd id="k2">⇧</kbd></span>
+      <span>Tap Shift twice to try it on this page</span>
+    </button>
+
+    <div class="cta">
+      <a class="btn primary" href="#" id="download">Download for macOS</a>
+      <a class="btn ghost" href="https://github.com/jaymalve/keybinds">View on GitHub</a>
+    </div>
+  </div>
+</main>
+
+<footer>Native Swift · macOS 14 and later · No Screen Recording permission needed</footer>
+
+<div class="toast" id="toast"></div>
+
+<div class="scrim" id="scrim"></div>
+<div class="palette" id="palette" role="dialog" aria-label="Keybinds demo">
+  <div class="search">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D8DCE3" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" placeholder="Search apps, windows and tabs" autocomplete="off" spellcheck="false">
+  </div>
+  <ul class="rows" id="rows"></ul>
+  <div class="hints"><span id="count"></span><span>↑↓ select &nbsp; ↩ jump &nbsp; ⌘⌫ close &nbsp; esc</span></div>
+</div>
+
+<script>
+// Everything the demo palette can jump to. Each one is also a faint window on the page.
+const targets = [
+  { title: "Inbox (3)", sub: "mail.google.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "M", x: 4, y: 10, r: -6 },
+  { title: "npm run dev — ~/keybinds", sub: "Terminal", kind: "Tab", c: "#8B9099", g: ">_", x: 78, y: 6, r: 5 },
+  { title: "Landing page v3", sub: "Figma", kind: "Window", c: "#F7F8FA", g: "F", x: 82, y: 62, r: -4 },
+  { title: "keybinds/PLAN.md", sub: "github.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "G", x: 2, y: 58, r: 4 },
+  { title: "ssh prod-1 — ~", sub: "Terminal", kind: "Tab", c: "#8B9099", g: ">_", x: 10, y: 34, r: -3 },
+  { title: "#design", sub: "Slack", kind: "Window", c: "#A9AEB7", g: "#", x: 74, y: 34, r: 3 },
+  { title: "My issues", sub: "linear.app · Safari", kind: "Tab", c: "#D8DCE3", g: "L", x: 30, y: 82, r: -2 },
+  { title: "Groceries", sub: "Notes", kind: "Window", c: "#F7F8FA", g: "N", x: 56, y: 86, r: 6 },
+  { title: "lo-fi beats to code to", sub: "youtube.com · Chrome", kind: "Tab", c: "#A9AEB7", g: "▶", x: 30, y: 3, r: 2 },
+  { title: "Q4 roadmap", sub: "docs.google.com · Chrome", kind: "Tab", c: "#D8DCE3", g: "D", x: 56, y: 4, r: -7 },
+  { title: "Spotify", sub: "Application", kind: "App", c: "#8B9099", g: "♪", x: 9, y: 84, r: -5 },
+];
+
+// ---------- Desk ----------
+const desk = document.getElementById("desk");
+targets.forEach((t, i) => {
+  const el = document.createElement("div");
+  el.className = "win";
+  el.style.left = t.x + "vw";
+  el.style.top = t.y + "vh";
+  el.style.setProperty("--r", t.r + "deg");
+  el.style.setProperty("--delay", (-i * 1.7) + "s");
+  el.innerHTML = `<div class="bar"><span class="dot"></span><span class="t"></span></div><div class="lines"><i></i><i></i><i></i></div>`;
+  el.querySelector(".t").textContent = t.title;
+  desk.appendChild(el);
+  t.el = el;
+});
+
+// ---------- Fuzzy match: letters in order; consecutive and word-start hits score higher ----------
+function match(query, text) {
+  const q = query.toLowerCase(), s = text.toLowerCase();
+  let qi = 0, score = 0, prev = -2, hits = [];
+  for (let i = 0; i < s.length && qi < q.length; i++) {
+    if (s[i] !== q[qi]) continue;
+    score += 1 + (i === prev + 1 ? 4 : 0) + (i === 0 || /[\s\-/.#·]/.test(s[i - 1]) ? 3 : 0);
+    hits.push(i); prev = i; qi++;
+  }
+  return qi === q.length ? { score, hits } : null;
+}
+
+function search(query) {
+  const live = targets.filter(t => !t.closed);
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return live.map(t => ({ t, hits: [] }));
+  return live.map(t => {
+    let score = 0, hits = [];
+    for (const w of words) {
+      const a = match(w, t.title), b = match(w, t.sub);
+      if (!a && !b) return null;
+      if (a && (!b || a.score >= b.score * .8)) { score += a.score; hits.push(...a.hits); }
+      else score += b.score * .8;
+    }
+    return { t, score, hits };
+  }).filter(Boolean).sort((a, b) => b.score - a.score);
+}
+
+// ---------- Palette ----------
+const palette = document.getElementById("palette"), scrim = document.getElementById("scrim");
+const q = document.getElementById("q"), rows = document.getElementById("rows"), count = document.getElementById("count");
+let results = [], sel = 0;
+
+function render() {
+  results = search(q.value);
+  sel = Math.min(sel, Math.max(0, results.length - 1));
+  rows.innerHTML = "";
+  if (!results.length) rows.innerHTML = `<li class="empty">No matches</li>`;
+  results.forEach((r, i) => {
+    const li = document.createElement("li");
+    li.className = "row" + (i === sel ? " sel" : "");
+    const hit = new Set(r.hits);
+    const title = [...r.t.title].map((ch, j) => hit.has(j) ? `<mark>${esc(ch)}</mark>` : esc(ch)).join("");
+    li.innerHTML = `<span class="ico" style="background:${r.t.c}">${esc(r.t.g)}</span>
+      <span class="txt"><div class="ttl">${title}</div><div class="sub">${esc(r.t.sub)}</div></span>
+      <span class="badge">${r.t.kind}</span>`;
+    li.onmouseenter = () => { sel = i; paint(); };
+    li.onclick = () => jump(r.t);
+    rows.appendChild(li);
+  });
+  const live = targets.filter(t => !t.closed);
+  count.textContent = `${live.filter(t => t.kind === "Tab").length} tabs · ${live.filter(t => t.kind === "Window").length} windows`;
+}
+function paint() {
+  [...rows.children].forEach((li, i) => li.classList.toggle("sel", i === sel));
+  rows.children[sel]?.scrollIntoView({ block: "nearest" });
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function open() {
+  q.value = ""; sel = 0; render();
+  palette.classList.add("open"); scrim.classList.add("open");
+  setTimeout(() => q.focus(), 10);
+}
+function close() {
+  palette.classList.remove("open"); scrim.classList.remove("open"); q.blur();
+}
+const isOpen = () => palette.classList.contains("open");
+
+// "Jumping": the window comes forward, everything else dims.
+let focusTimer;
+function jump(t) {
+  close();
+  targets.forEach(x => x.el.classList.toggle("here", x === t));
+  desk.classList.add("focusing");
+  toast(`→ ${t.title}  ·  ${t.sub}`);
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(() => { t.el.classList.remove("here"); desk.classList.remove("focusing"); }, 2200);
+}
+function closeTarget(t) {
+  t.closed = true; t.el.classList.add("gone");
+  toast(`Closed ${t.title}`);
+  render();
+  if (!targets.some(x => !x.closed)) setTimeout(() => {   // bring them all back
+    targets.forEach(x => { x.closed = false; x.el.classList.remove("gone"); }); render();
+  }, 1200);
+}
+
+let toastTimer;
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+q.addEventListener("input", () => { sel = 0; render(); });
+q.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) { sel = (sel + 1) % Math.max(1, results.length); paint(); e.preventDefault(); }
+  else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) { sel = (sel - 1 + results.length) % Math.max(1, results.length); paint(); e.preventDefault(); }
+  else if (e.key === "Enter" && results[sel]) { jump(results[sel].t); e.preventDefault(); }
+  else if (e.key === "Backspace" && e.metaKey && results[sel]) { closeTarget(results[sel].t); e.preventDefault(); }
+});
+scrim.onclick = close;
+document.getElementById("try").onclick = open;
+
+// ---------- Double-tap Shift, same rule as the app: each tap ≤ 200 ms, ≤ 300 ms apart, nothing else pressed ----------
+const k1 = document.getElementById("k1"), k2 = document.getElementById("k2");
+let shiftDown = 0, dirty = false, lastTap = 0;
+addEventListener("keydown", e => {
+  if (e.key === "Shift") {
+    if (!e.repeat) { shiftDown = performance.now(); dirty = e.metaKey || e.ctrlKey || e.altKey; (lastTap ? k2 : k1).classList.add("down"); }
+    return;
+  }
+  dirty = true; lastTap = 0;
+  if (e.key === "Escape" && isOpen()) close();
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); isOpen() ? close() : open(); }
+});
+addEventListener("keyup", e => {
+  if (e.key !== "Shift") return;
+  k1.classList.remove("down"); k2.classList.remove("down");
+  const now = performance.now();
+  if (dirty || now - shiftDown > 200) { dirty = false; lastTap = 0; return; }
+  if (lastTap && now - lastTap <= 300) { lastTap = 0; isOpen() ? close() : open(); }
+  else lastTap = now;
+});
+
+if (location.hash === "#try") open();  // shareable link straight into the demo
+document.getElementById("download").onclick = e => { e.preventDefault(); toast("Coming soon — the first build is in testing"); };
+</script>
+</body>
+</html>
