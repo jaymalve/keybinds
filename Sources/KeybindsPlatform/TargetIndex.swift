@@ -22,6 +22,9 @@ public final class TargetIndex {
     @ObservationIgnored private var installed: [InstalledApp] = []
     @ObservationIgnored private var installedScannedAt = Date.distantPast
     @ObservationIgnored private let windowScanner = WindowScanner()
+    @ObservationIgnored public let fileSearch = FileSearch()
+    @ObservationIgnored private var recentFiles: [Target] = []
+    @ObservationIgnored private var filesScannedAt = Date.distantPast
     @ObservationIgnored private let recency = AppRecency()
 
     // Latest results from each source.
@@ -85,6 +88,10 @@ public final class TargetIndex {
     }
 
     public func apply(_ settings: Settings) {
+        if settings.searchFiles != self.settings.searchFiles {
+            recentFiles = []
+            filesScannedAt = .distantPast
+        }
         self.settings = settings
         // Drop tabs from sources that were just switched off; their apps fall back to windows.
         tabs = tabs.filter { pid, _ in
@@ -106,6 +113,17 @@ public final class TargetIndex {
             refreshTabs(app, bundleID: bundleID, source: source)
         }
         refreshInstalledApps()
+        refreshRecentFiles()
+    }
+
+    /// Recently used files change slowly; refresh at most every 5 minutes.
+    private func refreshRecentFiles() {
+        guard settings.searchFiles, Date().timeIntervalSince(filesScannedAt) > 300 else { return }
+        filesScannedAt = Date()
+        Task {
+            self.recentFiles = await self.fileSearch.recent()
+            self.rebuild()
+        }
     }
 
     /// Installed apps change rarely; rescan at most every 10 minutes.
@@ -200,9 +218,14 @@ public final class TargetIndex {
         scriptWindowMap[ScriptWindowKey(pid: pid, windowID: scriptWindowID)]
     }
 
+    /// Usage score for ranking targets that aren't in the index (live file results).
+    public func frecency(_ target: Target) -> Double {
+        history.frecency(target.historyKey)
+    }
+
     /// Records a jump: app recency now, usage history (saved shortly after) for ranking.
     func noteActivated(_ target: Target) {
-        if case .launch = target.locator {} else { recency.touch(target.pid) }
+        if target.pid > 0 { recency.touch(target.pid) }
         history.record(target.historyKey)
         search = SearchIndex(targets, frecency: { [history] in history.frecency($0.historyKey) })
         historySave?.cancel()
@@ -273,6 +296,11 @@ public final class TargetIndex {
                                                   locator: .launch(path: app.path)),
                                    key: (Int.max, Int.max, 0)))
             }
+        }
+
+        // Files and folders last, most recently used first (search ranks them by match).
+        if settings.searchFiles {
+            for (i, file) in recentFiles.enumerated() { keyed.append(Keyed(target: file, key: (Int.max, Int.max, 1 + i))) }
         }
 
         keyed.sort { $0.key < $1.key }

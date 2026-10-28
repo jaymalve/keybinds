@@ -17,7 +17,7 @@ final class PaletteModel {
 
     let index: TargetIndex
     let favicons: FaviconStore
-    var query = "" { didSet { selectedID = nil; message = nil } }
+    var query = "" { didSet { selectedID = nil; message = nil; searchFilesLive() } }
     /// The selected row, by identity: rows reorder while scans land, and an index would drift onto a neighbor.
     /// nil means "the first row".
     var selectedID: String? { didSet { if selectedID != oldValue, message?.key != nil { message = nil } } }
@@ -27,6 +27,11 @@ final class PaletteModel {
     /// Settings → group tabs by website and fold duplicates.
     var groupTabs = false
     var expandedSites = Set<String>()
+    /// Settings → search files and folders.
+    var searchFiles = true
+    /// Spotlight results for the current words, re-ranked by the fuzzy matcher on every keystroke.
+    private var liveFiles = SearchIndex([])
+    @ObservationIgnored private var liveTask: Task<Void, Never>?
 
     init(index: TargetIndex, favicons: FaviconStore) {
         self.index = index
@@ -36,7 +41,9 @@ final class PaletteModel {
     var browsing: Bool { SearchIndex.isBrowsing(query) }
 
     var rows: [PaletteRow] {
-        let rows = PaletteRows.build(index.search.search(query), collapseDuplicates: groupTabs,
+        var results = index.search.search(query)
+        if !browsing { results = SearchIndex.merge(results, liveFiles.search(query)) }
+        let rows = PaletteRows.build(results, collapseDuplicates: groupTabs,
                                      groupBySite: groupTabs && browsing, expanded: expandedSites)
         return Array(rows.prefix(Self.maxRows))
     }
@@ -44,6 +51,25 @@ final class PaletteModel {
     /// Every copy of a page except the most recent one, across all open tabs.
     var duplicateExtras: [Target] {
         PaletteRows.duplicateTabs(index.targets).flatMap { $0.dropFirst() }
+    }
+
+    /// Spotlight finds files by name beyond the recently used ones already in the index. Debounced; earlier
+    /// results stay until new ones land, so the list doesn't flicker.
+    private func searchFilesLive() {
+        liveTask?.cancel()
+        let (kinds, text) = SearchIndex.parse(query)
+        let words = text.trimmingCharacters(in: .whitespaces)
+        guard searchFiles, kinds?.contains(.file) ?? true, words.count >= 2 else {
+            liveFiles = SearchIndex([])
+            return
+        }
+        liveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard let self, !Task.isCancelled else { return }
+            let files = await index.fileSearch.search(words)
+            guard !Task.isCancelled else { return }
+            liveFiles = SearchIndex(files, frecency: { [index] in index.frecency($0) })
+        }
     }
 
     func selectedIndex(in rows: [PaletteRow]) -> Int {
@@ -100,6 +126,7 @@ final class PaletteController: NSObject, NSWindowDelegate {
 
     func apply(_ settings: KeybindsCore.Settings) {
         model.groupTabs = settings.groupTabs
+        model.searchFiles = settings.searchFiles
     }
 
     func toggle() {
@@ -208,6 +235,7 @@ final class PaletteController: NSObject, NSWindowDelegate {
             case (51, true): closeDuplicates()  // ⌘⇧⌫
             case (51, false): closeSelected()   // ⌘⌫
             case (12, false): quitSelected()    // ⌘Q
+            case (36, _), (76, _): revealSelected()  // ⌘↩
             default: return false  // ⌘A, ⌘C, ⌘V… go to the search field
             }
             return true
@@ -253,6 +281,11 @@ final class PaletteController: NSObject, NSWindowDelegate {
             close(targets, rowIDs: [row.id])
         case .target(let r):
             let target = r.target
+            if target.isFileSystem {
+                guard confirm("trash:\(row.id)", "Press ⌘⌫ again to move “\(target.title)” to the Trash") else { return }
+                close([target], rowIDs: [row.id])
+                return
+            }
             if target.kind == .app {
                 NSSound.beep()
                 model.message = PaletteModel.Message(key: nil, text: "Apps can't be closed with ⌘⌫. ⌘Q quits \(target.appName).")
@@ -282,8 +315,15 @@ final class PaletteController: NSObject, NSWindowDelegate {
         close(extras, rowIDs: Set(extras.map(\.id)))
     }
 
+    /// ⌘↩ on a file or folder: show it in Finder instead of opening it.
+    private func revealSelected() {
+        guard let target = model.selectedRow?.target, target.isFileSystem else { NSSound.beep(); return }
+        hide()
+        _ = activator.reveal(target)
+    }
+
     private func quitSelected() {
-        guard let target = model.selectedRow?.allTargets.first, target.pid > 0 else { NSSound.beep(); return }
+        guard let target = model.selectedRow?.allTargets.first, target.pid > 0, !target.isFileSystem else { NSSound.beep(); return }
         guard confirm("quit:\(target.pid)", "Press ⌘Q again to quit \(target.appName)") else { return }
         let all = model.index.targets.filter { $0.pid == target.pid }
         model.selectNeighbor(removing: Set(all.map(\.id)))

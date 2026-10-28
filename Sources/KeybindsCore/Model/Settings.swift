@@ -14,14 +14,16 @@ public struct Settings: Codable, Equatable, Sendable {
     public var showNotRunningApps: Bool
     /// Group browser tabs by website, and fold copies of the same page into one row.
     public var groupTabs: Bool
+    /// Files and folders: recently used ones plus a live Spotlight search as you type.
+    public var searchFiles: Bool
 
     public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil,
                                            comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true,
-                                           groupTabs: false)
+                                           groupTabs: false, searchFiles: true)
 
     public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?,
                 comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool,
-                groupTabs: Bool) {
+                groupTabs: Bool, searchFiles: Bool) {
         self.doubleShiftEnabled = doubleShiftEnabled
         self.doubleTap = doubleTap
         self.paletteCombo = paletteCombo
@@ -29,6 +31,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.disabledTabSources = disabledTabSources
         self.showNotRunningApps = showNotRunningApps
         self.groupTabs = groupTabs
+        self.searchFiles = searchFiles
     }
 
     // Missing keys fall back to defaults, so older settings files keep loading as fields are added.
@@ -42,5 +45,6 @@ public struct Settings: Codable, Equatable, Sendable {
         disabledTabSources = try c.decodeIfPresent(Set<String>.self, forKey: .disabledTabSources) ?? d.disabledTabSources
         showNotRunningApps = try c.decodeIfPresent(Bool.self, forKey: .showNotRunningApps) ?? d.showNotRunningApps
         groupTabs = try c.decodeIfPresent(Bool.self, forKey: .groupTabs) ?? d.groupTabs
+        searchFiles = try c.decodeIfPresent(Bool.self, forKey: .searchFiles) ?? d.searchFiles
     }
 }

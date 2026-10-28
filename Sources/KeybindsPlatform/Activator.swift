@@ -27,6 +27,9 @@ public struct Activator {
                 if let error { log.error("launch failed: \(error.localizedDescription, privacy: .public)") }
             }
 
+        case .file(let path):
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+
         case .window(let pid, let windowID):
             focusWindow(pid: pid, windowID: windowID, app: app)
 
@@ -43,6 +46,14 @@ public struct Activator {
         }
         index.noteActivated(target)
         index.scheduleRefresh()
+    }
+
+    /// Shows a file or folder selected in a Finder window.
+    public func reveal(_ target: Target) -> Bool {
+        guard case .file(let path) = target.locator else { return false }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        index.noteActivated(target)
+        return true
     }
 
     /// Select the tab first, then focus its window. If the window couldn't be matched to a CGWindowID,

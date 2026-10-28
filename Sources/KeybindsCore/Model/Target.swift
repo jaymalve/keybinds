@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TargetKind: String, Sendable {
-    case app, window, browserTab, terminalTab
+    case app, window, browserTab, terminalTab, file, folder
 }
 
 /// Everything needed to activate a target again.
@@ -19,6 +19,8 @@ public enum Locator: Hashable, Sendable {
     case safariTab(windowID: String, tabIndex: Int, url: String?)
     /// The tty identifies a Terminal tab for as long as it's open.
     case terminalTab(windowID: String, tabIndex: Int, tty: String)
+    /// A file or folder on disk.
+    case file(path: String)
 }
 
 /// One row in the palette: something you can jump to.
@@ -42,6 +44,7 @@ public struct Target: Identifiable, Hashable, Sendable {
         case .chromiumTab(let bundleID, _, let tabID): id = "tab:\(bundleID):\(tabID)"
         case .safariTab(let windowID, let tabIndex, _): id = "safari:\(windowID):\(tabIndex)"
         case .terminalTab(_, _, let tty): id = "term:\(tty)"
+        case .file(let path): id = "file:\(path)"
         }
         self.url = url
         self.kind = kind
@@ -68,6 +71,8 @@ extension Target {
             return "win:\(bundleID ?? appName):\(title)"
         case .app:
             return "app:\(bundleID ?? appName)"
+        case .file, .folder:
+            return id
         }
     }
 }
@@ -86,4 +91,8 @@ extension Target {
         guard kind == .browserTab, let host = url.flatMap({ URL(string: $0)?.host() }), !host.isEmpty else { return nil }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
+}
+
+extension Target {
+    public var isFileSystem: Bool { kind == .file || kind == .folder }
 }

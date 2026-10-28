@@ -22,12 +22,38 @@ public struct SearchIndex: Sendable {
     /// Usage boost: ~12 points for something used once recently, capped so a strong text match still wins.
     static let maxBoost = 40.0
 
-    /// `t ` tabs only, `w ` windows only, `a ` apps only.
+    /// Files rank a little below apps, windows and tabs with the same match.
+    static let filePenalty = 12
+
+    /// `t ` tabs only, `w ` windows only, `a ` apps only, `f ` files and folders only.
     static let scopes: [String: Set<TargetKind>] = [
         "t": [.browserTab, .terminalTab],
         "w": [.window],
         "a": [.app],
+        "f": [.file, .folder],
     ]
+
+    /// Splits off a scope prefix: the kinds it allows (nil = all) and the rest of the query.
+    public static func parse(_ rawQuery: String) -> (kinds: Set<TargetKind>?, text: String) {
+        let query = rawQuery.lowercased()
+        if query.count >= 2, query.dropFirst().first == " ", let scope = scopes[String(query.prefix(1))] {
+            return (scope, String(query.dropFirst(2)))
+        }
+        return (nil, query)
+    }
+
+    /// Merges two score-sorted result lists; on equal scores and duplicate ids, `a` wins.
+    public static func merge(_ a: [RankedTarget], _ b: [RankedTarget]) -> [RankedTarget] {
+        let ids = Set(a.map(\.id))
+        let b = b.filter { !ids.contains($0.id) }
+        var out: [RankedTarget] = []
+        out.reserveCapacity(a.count + b.count)
+        var i = 0, j = 0
+        while i < a.count || j < b.count {
+            if j == b.count || (i < a.count && a[i].score >= b[j].score) { out.append(a[i]); i += 1 } else { out.append(b[j]); j += 1 }
+        }
+        return out
+    }
 
     private let entries: [Entry]
 
@@ -40,30 +66,23 @@ public struct SearchIndex: Sendable {
 
     /// True when the query has no search words, only an optional scope prefix: the palette is browsing.
     public static func isBrowsing(_ query: String) -> Bool {
-        var q = query.lowercased()
-        if q.count >= 2, q.dropFirst().first == " ", scopes[String(q.prefix(1))] != nil { q = String(q.dropFirst(2)) }
-        return q.allSatisfy(\.isWhitespace)
+        parse(query).text.allSatisfy(\.isWhitespace)
     }
 
     public func search(_ rawQuery: String) -> [RankedTarget] {
-        var query = rawQuery.lowercased()
-        var kinds: Set<TargetKind>?
-        if query.count >= 2, query.dropFirst().first == " ", let scope = Self.scopes[String(query.prefix(1))] {
-            kinds = scope
-            query = String(query.dropFirst(2))
-        }
+        let (kinds, query) = Self.parse(rawQuery)
         let pool = kinds.map { k in entries.filter { k.contains($0.target.kind) } } ?? entries
         let tokens = query.split(whereSeparator: \.isWhitespace).map { Array($0) }
         return tokens.isEmpty ? recents(pool) : matches(tokens, in: pool)
     }
 
     /// Empty query: the previous target stays first (Enter = go back); then frequently used targets;
-    /// then everything else in recency order.
+    /// then everything else in recency order. Files only show here once you've opened them from the palette.
     private func recents(_ pool: [Entry]) -> [RankedTarget] {
         guard let first = pool.first else { return [] }
         let rest = pool.dropFirst()
         let used = rest.filter { $0.frecency >= 0.1 }.sorted { $0.frecency > $1.frecency }
-        let unused = rest.filter { $0.frecency < 0.1 }
+        let unused = rest.filter { $0.frecency < 0.1 && !$0.target.isFileSystem }
         return ([first] + used + unused).map {
             RankedTarget(target: $0.target, score: 0, titleMatches: [], subtitleMatches: [])
         }
@@ -94,6 +113,7 @@ public struct SearchIndex: Sendable {
             }
             guard matchedAll else { continue }
             total += Int(min(Self.maxBoost, 12 * log2(1 + entry.frecency)))
+            if entry.target.isFileSystem { total -= Self.filePenalty }
             results.append((RankedTarget(target: entry.target, score: total,
                                          titleMatches: titleHits, subtitleMatches: subtitleHits), order))
         }

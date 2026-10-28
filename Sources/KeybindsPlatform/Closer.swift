@@ -49,6 +49,9 @@ public struct Closer {
                 guard let window = index.element(for: windowID),
                       let button = AX.element(window, kAXCloseButtonAttribute) else { return false }
                 return AXUIElementPerformAction(button, kAXPressAction as CFString) == .success
+            case .file(let path):
+                try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                return true
             case .app, .launch:
                 return false
             }

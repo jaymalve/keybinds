@@ -14,7 +14,7 @@ struct PaletteView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.secondary)
-                TextField("Search apps, windows and tabs", text: $model.query)
+                TextField("Search apps, windows, tabs and files", text: $model.query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 22))
                     .focused($searchFocused)
@@ -101,7 +101,10 @@ struct PaletteView: View {
         if case .site(let site, _)? = row?.content {
             return model.expandedSites.contains(site) ? "← collapse   ⌘⌫ close all   esc" : "→ expand   ⌘⌫ close all   esc"
         }
-        return "t/w/a␣ filter   ↩ open   ⌘⌫ close   ⌘Q quit   esc"
+        if row?.target?.isFileSystem == true {
+            return "↩ open   ⌘↩ show in Finder   ⌘⌫ trash   esc"
+        }
+        return "t/w/a/f␣ filter   ↩ open   ⌘⌫ close   ⌘Q quit   esc"
     }
 
     private var summary: String {
@@ -185,6 +188,8 @@ private struct ResultRow: View {
         switch result.target.kind {
         case .app: if case .launch = result.target.locator { "Launch" } else { "App" }
         case .window: "Window"
+        case .file: "File"
+        case .folder: "Folder"
         case .browserTab, .terminalTab: "Tab"
         }
     }
@@ -258,6 +263,9 @@ enum AppIcons {
         let key: String
         let make: () -> NSImage?
         if case .launch(let path) = target.locator {
+            key = path
+            make = { NSWorkspace.shared.icon(forFile: path) }
+        } else if case .file(let path) = target.locator {
             key = path
             make = { NSWorkspace.shared.icon(forFile: path) }
         } else {

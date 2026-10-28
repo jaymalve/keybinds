@@ -101,6 +101,12 @@ struct SettingsView: View {
                 Toggle("Include installed apps that aren't running", isOn: $model.settings.showNotRunningApps)
             }
 
+            Section("Files") {
+                Toggle("Search files and folders", isOn: $model.settings.searchFiles)
+                Text("Files you used recently match loosely; any other file is found by name with Spotlight as you type. Type “f ” to search only files.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
             Section {
                 Text(model.store.url.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
