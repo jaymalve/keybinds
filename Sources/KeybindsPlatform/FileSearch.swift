@@ -31,6 +31,7 @@ public final class FileSearch {
         cancelLive()
         let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty else { return [] }
+        log.notice("spotlight search: \(words, privacy: .public)")
         // Word-start matching, like Finder's search: "plan" finds "implementation plan.md" but not
         // thousands of "explanation" files. Measured 120–220 ms for typical words.
         let clauses = words.map { word -> String in
@@ -69,6 +70,7 @@ public final class FileSearch {
     /// Broad words ("ke") can match tens of thousands of files and take seconds to finish; take what has
     /// arrived by then. Results are ranked by our matcher afterwards, so completeness matters less than speed.
     static let timeLimit: Duration = .milliseconds(600)
+    static let emptyTimeLimit: Duration = .seconds(3)
 
     private func start(_ query: NSMetadataQuery, limit: Int, done: @escaping @MainActor ([Target]) -> Void) {
         query.searchScopes = [NSMetadataQueryUserHomeScope]
@@ -88,7 +90,7 @@ public final class FileSearch {
                 found.append((t, t.added ?? .distantPast))
             }
             found.sort { $0.1 > $1.1 }
-            log.debug("spotlight: \(query.resultCount) results, kept \(found.count) in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+            log.notice("spotlight: \(query.resultCount, privacy: .public) results, kept \(found.count) in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
             done(found.prefix(limit).map(\.0))
         }
         // The observer fires on the main queue, where the query lives.
@@ -102,8 +104,15 @@ public final class FileSearch {
             finish()
             return
         }
+        // Cut a slow search short only once something has arrived; a busy Spotlight (indexing after a
+        // build, say) can take over a second to return even a single match.
         Task { @MainActor in
             try? await Task.sleep(for: Self.timeLimit)
+            var waited = Self.timeLimit
+            while !finished, query.resultCount == 0, waited < Self.emptyTimeLimit {
+                try? await Task.sleep(for: .milliseconds(100))
+                waited += .milliseconds(100)
+            }
             finish()
         }
     }
