@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let index = TargetIndex()
     private let favicons = FaviconStore()
     private lazy var palette = PaletteController(index: index, favicons: favicons)
+    private let clickMode = ClickMode()
     private lazy var settingsWindow = SettingsWindowController(model: settingsModel)
     private var hotkeys: HotkeyManager!
     private var menuBar: MenuBarController!
@@ -15,12 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionPoll: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if ProcessInfo.processInfo.environment["KB_AX_SPIKE"] != nil {
-            Thread.detachNewThread { AXSpike.run(); exit(0) }
-            return
-        }
         let settings = settingsModel.settings
-        hotkeys = HotkeyManager(settings: settings) { [weak self] in self?.palette.toggle() }
+        hotkeys = HotkeyManager(settings: settings,
+                                onTrigger: { [weak self] in self?.palette.toggle() },
+                                onClickMode: { [weak self] in self?.startClickMode() })
         hotkeys.apply(settings)
         index.apply(settings)
         palette.apply(settings)
@@ -31,9 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             index.apply(settings)
             palette.apply(settings)
             settingsModel.comboError = hotkeys.comboError
+            settingsModel.clickComboError = hotkeys.clickComboError
         }
         settingsModel.onRecordingChange = { [weak self] recording in self?.hotkeys.setPaused(recording) }
         settingsModel.comboError = hotkeys.comboError
+        settingsModel.clickComboError = hotkeys.clickComboError
 
         menuBar = MenuBarController(
             openPalette: { [weak self] in self?.palette.show() },
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showPermissions: { [weak self] in self?.showOnboarding() }
         )
         palette.onOpenSettings = { [weak self] in self?.settingsWindow.show() }
+        palette.onClickMode = { [weak self] in self?.startClickMode() }
 
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         Log.app.notice("launched v\(version, privacy: .public), accessibility granted: \(Permissions.accessibilityGranted)")
@@ -51,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showOnboarding()
             waitForAccessibility()
         }
+    }
+
+    private func startClickMode() {
+        palette.hide()
+        clickMode.toggle()
     }
 
     private func showOnboarding() {

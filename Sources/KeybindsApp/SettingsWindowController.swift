@@ -19,6 +19,7 @@ final class SettingsModel {
         didSet { onRecordingChange(recording) }
     }
     var comboError: String?
+    var clickComboError: String?
 
     @ObservationIgnored let store: SettingsStore
     @ObservationIgnored var onChange: (KeybindsCore.Settings) -> Void = { _ in }
@@ -86,6 +87,17 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Click with the keyboard") {
+                LabeledContent("Keyboard shortcut") {
+                    ShortcutRecorder(combo: $model.settings.clickCombo, recording: $model.recording)
+                }
+                if let error = model.clickComboError {
+                    Text(error).font(.callout).foregroundStyle(.orange)
+                }
+                Text("Puts a short label on everything clickable in the front window; type a label to click it. Hold ⌘ for ⌘-click, ⇧ for right-click, ⌥ to just move the pointer there. Tab in the palette does the same.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
             Section("Tabs") {
                 sourceToggle("Chrome, Brave, Edge and Vivaldi tabs", "chromium")
                 sourceToggle("Safari tabs", "safari")
@@ -138,11 +150,11 @@ private struct ShortcutRecorder: View {
 
     var body: some View {
         HStack {
-            Button(recording ? "Press shortcut…" : (combo?.displayString ?? "Record Shortcut")) {
-                recording ? stop() : start()
+            Button(monitor != nil ? "Press shortcut…" : (combo?.displayString ?? "Record Shortcut")) {
+                monitor != nil ? stop() : start()
             }
             .frame(minWidth: 130)
-            if combo != nil && !recording {
+            if combo != nil && monitor == nil {
                 Button("Clear") { combo = nil }
             }
         }
@@ -172,8 +184,9 @@ private struct ShortcutRecorder: View {
     }
 
     private func stop() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
+        guard let monitor else { return }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
         recording = false
     }
 
