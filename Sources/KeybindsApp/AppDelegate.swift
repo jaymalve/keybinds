@@ -15,6 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionPoll: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if ProcessInfo.processInfo.environment["KB_AX_SPIKE"] != nil {
+            Thread.detachNewThread { AXSpike.run(); exit(0) }
+            return
+        }
         let settings = settingsModel.settings
         hotkeys = HotkeyManager(settings: settings) { [weak self] in self?.palette.toggle() }
         hotkeys.apply(settings)
