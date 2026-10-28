@@ -34,9 +34,11 @@ public struct Target: Identifiable, Hashable, Sendable {
     public let pid: Int32
     public let url: String?
     public let locator: Locator
+    /// Files and folders: when the item arrived in its folder (downloaded, saved, moved in).
+    public let added: Date?
 
     public init(kind: TargetKind, title: String, subtitle: String, appName: String,
-                bundleID: String?, pid: Int32, url: String? = nil, locator: Locator) {
+                bundleID: String?, pid: Int32, url: String? = nil, locator: Locator, added: Date? = nil) {
         switch locator {
         case .app(let pid): id = "app:\(pid)"
         case .launch(let path): id = "launch:\(path)"
@@ -54,6 +56,7 @@ public struct Target: Identifiable, Hashable, Sendable {
         self.bundleID = bundleID
         self.pid = pid
         self.locator = locator
+        self.added = added
     }
 }
 

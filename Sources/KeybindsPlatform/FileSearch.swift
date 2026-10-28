@@ -18,7 +18,7 @@ public final class FileSearch {
 
     public init() {}
 
-    /// Files and folders opened in the last couple of months, most recent first.
+    /// Files and folders opened in the last couple of months, most recently added first.
     func recent() async -> [Target] {
         let since = Date().addingTimeInterval(-Double(Self.recentDays) * 86_400)
         let query = NSMetadataQuery()
@@ -75,7 +75,7 @@ public final class FileSearch {
         let start = Date()
         var finished = false
         var token: NSObjectProtocol?
-        // Stop the query and keep the most recently used or changed matches that aren't noise.
+        // Stop the query and keep the most recently added matches that aren't noise.
         let finish = {
             guard !finished else { return }
             finished = true
@@ -85,7 +85,7 @@ public final class FileSearch {
             var found: [(Target, Date)] = []
             for i in 0..<query.resultCount {
                 guard let item = query.result(at: i) as? NSMetadataItem, let t = Self.target(item) else { continue }
-                found.append((t, Self.lastTouched(item)))
+                found.append((t, t.added ?? .distantPast))
             }
             found.sort { $0.1 > $1.1 }
             log.debug("spotlight: \(query.resultCount) results, kept \(found.count) in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
@@ -108,10 +108,10 @@ public final class FileSearch {
         }
     }
 
-    private static func lastTouched(_ item: NSMetadataItem) -> Date {
-        item.value(forAttribute: "kMDItemLastUsedDate") as? Date
-            ?? item.value(forAttribute: NSMetadataItemFSContentChangeDateKey) as? Date
-            ?? .distantPast
+    /// When the item arrived in its folder; older volumes lack the attribute, so fall back to creation.
+    private static func added(_ item: NSMetadataItem) -> Date? {
+        item.value(forAttribute: "kMDItemDateAdded") as? Date
+            ?? item.value(forAttribute: NSMetadataItemFSCreationDateKey) as? Date
     }
 
     /// Skips noise: hidden paths, Library, app bundles and their insides, build output, dependencies.
@@ -129,6 +129,6 @@ public final class FileSearch {
         let parent = (path as NSString).deletingLastPathComponent
         let shortParent = parent == home ? "~" : "~" + parent.dropFirst(home.count)
         return Target(kind: isFolder ? .folder : .file, title: name, subtitle: shortParent,
-                      appName: "Finder", bundleID: nil, pid: 0, locator: .file(path: path))
+                      appName: "Finder", bundleID: nil, pid: 0, locator: .file(path: path), added: added(item))
     }
 }

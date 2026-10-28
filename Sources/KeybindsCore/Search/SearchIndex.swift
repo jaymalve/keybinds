@@ -73,16 +73,17 @@ public struct SearchIndex: Sendable {
         let (kinds, query) = Self.parse(rawQuery)
         let pool = kinds.map { k in entries.filter { k.contains($0.target.kind) } } ?? entries
         let tokens = query.split(whereSeparator: \.isWhitespace).map { Array($0) }
-        return tokens.isEmpty ? recents(pool) : matches(tokens, in: pool)
+        return tokens.isEmpty ? recents(pool, filesOnly: kinds == Self.scopes["f"]) : matches(tokens, in: pool)
     }
 
     /// Empty query: the previous target stays first (Enter = go back); then frequently used targets;
-    /// then everything else in recency order. Files only show here once you've opened them from the palette.
-    private func recents(_ pool: [Entry]) -> [RankedTarget] {
+    /// then everything else in recency order. Files only show here once you've opened them from the palette,
+    /// unless the `f ` scope asks for files.
+    private func recents(_ pool: [Entry], filesOnly: Bool) -> [RankedTarget] {
         guard let first = pool.first else { return [] }
         let rest = pool.dropFirst()
         let used = rest.filter { $0.frecency >= 0.1 }.sorted { $0.frecency > $1.frecency }
-        let unused = rest.filter { $0.frecency < 0.1 && !$0.target.isFileSystem }
+        let unused = rest.filter { $0.frecency < 0.1 && (filesOnly || !$0.target.isFileSystem) }
         return ([first] + used + unused).map {
             RankedTarget(target: $0.target, score: 0, titleMatches: [], subtitleMatches: [])
         }
@@ -119,5 +120,13 @@ public struct SearchIndex: Sendable {
         }
         results.sort { $0.0.score != $1.0.score ? $0.0.score > $1.0.score : $0.1 < $1.1 }
         return results.map(\.0)
+    }
+
+    /// Files and folders go after everything else, most recently added first, whatever their match score.
+    public static func filesByDateAdded(_ results: [RankedTarget]) -> [RankedTarget] {
+        let files = results.filter(\.target.isFileSystem)
+        guard !files.isEmpty else { return results }
+        return results.filter { !$0.target.isFileSystem }
+            + files.sorted { ($0.target.added ?? .distantPast) > ($1.target.added ?? .distantPast) }
     }
 }

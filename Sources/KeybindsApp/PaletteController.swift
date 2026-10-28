@@ -43,6 +43,8 @@ final class PaletteModel {
     var rows: [PaletteRow] {
         var results = index.search.search(query)
         if !browsing { results = SearchIndex.merge(results, liveFiles.search(query)) }
+        // Browsing without a scope keeps its order: the previous target first, then by use.
+        if !browsing || SearchIndex.parse(query).kinds != nil { results = SearchIndex.filesByDateAdded(results) }
         let rows = PaletteRows.build(results, collapseDuplicates: groupTabs,
                                      groupBySite: groupTabs && browsing, expanded: expandedSites)
         return Array(rows.prefix(Self.maxRows))
