@@ -249,8 +249,8 @@ Close/quit actions (`⌘W`, `⌘Q`) with the palette staying open. Rule model, `
 ### M6 — Click mode (Homerow-style labels)
 Labels on every clickable element in the front window; typing a label clicks it. Started by holding ⌥ (release cancels; right ⌘ or off in Settings), Tab in the palette, or an optional shortcut. Elements are found with one batched AX call each, with off-screen subtrees skipped (spike 7). Buttons are pressed through Accessibility, which leaves the pointer alone; other elements get a real click, and the pointer goes back. ⌘ while finishing a label ⌘-clicks, ⇧ right-clicks. Keys are read with an event tap, so the app underneath keeps focus.
 
-### M7 — Search by name (Shortcat-style)
-Type words to narrow the labels to matching elements (title, description, placeholder, tooltip). Per-window element cache refreshed by AX notifications, and prefetch on app activation. Browser-specific tuning, plus an optional JavaScript path for Chrome and Safari.
+### M7 — Search polish
+Search-first click mode shipped in M6 (faint outlines → type to narrow → numbered matches, ring on the best, release ⌥ or ↩ to click, Space for all labels). Left: tooltips and synonyms in matching, Per-window element cache refreshed by AX notifications, and prefetch on app activation. Browser-specific tuning, plus an optional JavaScript path for Chrome and Safari.
 
 ### M8 — Scroll, drag, menus
 Scroll mode (j/k, d/u, pick a scroll area by label), drag from one label to another, labels on the menu bar and open menus, menu search in the palette.

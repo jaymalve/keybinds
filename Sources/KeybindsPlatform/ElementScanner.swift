@@ -36,14 +36,15 @@ public enum ElementScanner {
                                      "AXPlaceholderValue"] as CFArray
 
     /// Blocking; call off the main thread.
-    public static func scan(pid: pid_t) -> [Clickable] {
+    /// The focused window's frame (AX coordinates) and what's clickable in it.
+    public static func scan(pid: pid_t) -> (window: CGRect, items: [Clickable]) {
         let start = Date()
         let app = AXUIElementCreateApplication(pid)
         enableAccessibility(app, pid: pid)
         guard let window = AX.element(app, kAXFocusedWindowAttribute) ?? AX.element(app, kAXMainWindowAttribute),
               let windowFrame = frame(window) else {
             log.notice("no focused window for pid \(pid)")
-            return []
+            return (.zero, [])
         }
         var found: [Clickable] = []
         var seen = Set<String>()
@@ -83,7 +84,7 @@ public enum ElementScanner {
         walk(window, clip: windowFrame, depth: 0)
         found.sort { abs($0.frame.minY - $1.frame.minY) > 4 ? $0.frame.minY < $1.frame.minY : $0.frame.minX < $1.frame.minX }
         log.notice("scan pid \(pid): \(nodes) nodes, \(found.count) clickable in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
-        return found
+        return (windowFrame, found)
     }
 
     nonisolated(unsafe) private static var enabled = Set<pid_t>()
