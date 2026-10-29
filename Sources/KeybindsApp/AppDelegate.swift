@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Holding the hold key shows labels; letting go hides them (after a click they're already gone).
     private func clickModeHeld(_ down: Bool) {
-        guard down else { clickMode.stop(); return }
+        guard down else { clickMode.release(); return }
         palette.hide()
         clickMode.start(holding: settingsModel.settings.clickHoldKey == .rightCommand ? .maskCommand : .maskAlternate)
     }
