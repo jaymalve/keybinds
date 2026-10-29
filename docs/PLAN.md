@@ -247,7 +247,7 @@ Frecency history, empty-query "recents", scope prefixes, favicons (§3.8), setti
 Close/quit actions (`⌘W`, `⌘Q`) with the palette staying open. Rule model, `⌘Enter` to bind, recorder UI, fallback actions (open URL / launch app), cycling between multiple matches, bindings editor in Settings.
 
 ### M6 — Click mode (Homerow-style labels)
-Labels on every clickable element in the front window; typing a label clicks it. Started with Tab in the palette or an optional shortcut. Elements are found with one batched AX call each, with off-screen subtrees skipped (spike 7). Buttons are pressed through Accessibility, which leaves the pointer alone; other elements get a real click, and the pointer goes back. ⌘ while finishing a label ⌘-clicks, ⇧ right-clicks, ⌥ hovers. Keys are read with an event tap, so the app underneath keeps focus.
+Labels on every clickable element in the front window; typing a label clicks it. Started by holding ⌥ (release cancels; right ⌘ or off in Settings), Tab in the palette, or an optional shortcut. Elements are found with one batched AX call each, with off-screen subtrees skipped (spike 7). Buttons are pressed through Accessibility, which leaves the pointer alone; other elements get a real click, and the pointer goes back. ⌘ while finishing a label ⌘-clicks, ⇧ right-clicks. Keys are read with an event tap, so the app underneath keeps focus.
 
 ### M7 — Search by name (Shortcat-style)
 Type words to narrow the labels to matching elements (title, description, placeholder, tooltip). Per-window element cache refreshed by AX notifications, and prefetch on app activation. Browser-specific tuning, plus an optional JavaScript path for Chrome and Safari.

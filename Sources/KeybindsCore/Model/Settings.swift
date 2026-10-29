@@ -18,14 +18,17 @@ public struct Settings: Codable, Equatable, Sendable {
     public var searchFiles: Bool
     /// Optional key combo that puts click labels on the front window (the palette's Tab does the same).
     public var clickCombo: KeyCombo?
+    /// Holding this key alone shows the click labels; letting go hides them.
+    public var clickHoldKey: HoldKey
 
     public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil,
                                            comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true,
-                                           groupTabs: false, searchFiles: true, clickCombo: nil)
+                                           groupTabs: false, searchFiles: true, clickCombo: nil,
+                                           clickHoldKey: .option)
 
     public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?,
                 comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool,
-                groupTabs: Bool, searchFiles: Bool, clickCombo: KeyCombo?) {
+                groupTabs: Bool, searchFiles: Bool, clickCombo: KeyCombo?, clickHoldKey: HoldKey) {
         self.doubleShiftEnabled = doubleShiftEnabled
         self.doubleTap = doubleTap
         self.paletteCombo = paletteCombo
@@ -35,6 +38,7 @@ public struct Settings: Codable, Equatable, Sendable {
         self.groupTabs = groupTabs
         self.searchFiles = searchFiles
         self.clickCombo = clickCombo
+        self.clickHoldKey = clickHoldKey
     }
 
     // Missing keys fall back to defaults, so older settings files keep loading as fields are added.
@@ -50,5 +54,14 @@ public struct Settings: Codable, Equatable, Sendable {
         groupTabs = try c.decodeIfPresent(Bool.self, forKey: .groupTabs) ?? d.groupTabs
         searchFiles = try c.decodeIfPresent(Bool.self, forKey: .searchFiles) ?? d.searchFiles
         clickCombo = try c.decodeIfPresent(KeyCombo.self, forKey: .clickCombo)
+        clickHoldKey = try c.decodeIfPresent(HoldKey.self, forKey: .clickHoldKey) ?? d.clickHoldKey
     }
+}
+
+/// The key you hold to show click labels.
+public enum HoldKey: String, Codable, Sendable, CaseIterable {
+    /// Either ⌥.
+    case option
+    case rightCommand
+    case off
 }

@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 
 public enum ClickAction: Sendable {
-    case click, commandClick, rightClick, hover
+    case click, commandClick, rightClick
 }
 
 /// Acts on a labelled element. Buttons are pressed through Accessibility, which leaves the pointer alone; anything
@@ -28,9 +28,6 @@ public enum Clicker {
         case .rightClick:
             if AXUIElementPerformAction(element, kAXShowMenuAction as CFString) == .success { return }
             click(at: center, button: .right, flags: [])
-        case .hover:
-            CGWarpMouseCursorPosition(center)
-            post(.mouseMoved, at: center, button: .left, flags: [])
         }
     }
 
