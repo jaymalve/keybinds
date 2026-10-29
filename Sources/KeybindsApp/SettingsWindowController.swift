@@ -88,13 +88,18 @@ struct SettingsView: View {
             }
 
             Section("Click with the keyboard") {
+                Picker("Hold to show labels", selection: $model.settings.clickHoldKey) {
+                    Text("⌥ Option").tag(HoldKey.option)
+                    Text("Right ⌘ Command").tag(HoldKey.rightCommand)
+                    Text("Off").tag(HoldKey.off)
+                }
                 LabeledContent("Keyboard shortcut") {
                     ShortcutRecorder(combo: $model.settings.clickCombo, recording: $model.recording)
                 }
                 if let error = model.clickComboError {
                     Text(error).font(.callout).foregroundStyle(.orange)
                 }
-                Text("Puts a short label on everything clickable in the front window; type a label to click it. Hold ⌘ for ⌘-click, ⇧ for right-click, ⌥ to just move the pointer there. Tab in the palette does the same.")
+                Text("Hold the key, type a label to click it, let go to cancel. The shortcut and Tab in the palette keep labels up until you type one or press Esc. Add ⌘ for ⌘-click or ⇧ for right-click on the last letter.")
                     .font(.callout).foregroundStyle(.secondary)
             }
 

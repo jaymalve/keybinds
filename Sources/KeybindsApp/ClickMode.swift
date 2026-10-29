@@ -5,7 +5,8 @@ import KeybindsPlatform
 /// Click mode: a label on everything clickable in the front window; typing a label clicks it.
 ///
 /// Keys are read with an event tap rather than by making the overlay key, so the app underneath keeps focus and
-/// its menus and popovers stay open. ⌘ while finishing a label ⌘-clicks, ⇧ right-clicks, ⌥ only moves the pointer.
+/// its menus and popovers stay open. ⌘ while finishing a label ⌘-clicks, ⇧ right-clicks.
+/// Started by holding ⌥ (labels go when it's let go), or by Tab in the palette / a shortcut (labels stay until Esc).
 @MainActor
 final class ClickMode {
     private var overlays: [HintOverlay] = []
@@ -17,6 +18,8 @@ final class ClickMode {
     private var scanTask: Task<Void, Never>?
     /// Key-ups of keys we swallowed, so the app doesn't see a stray release.
     private var swallowedKeys = Set<Int64>()
+    /// The modifier being held to keep labels up; it doesn't count toward the click type.
+    private var heldFlags: CGEventFlags = []
 
     var isActive: Bool { tap != nil }
 
@@ -24,13 +27,17 @@ final class ClickMode {
         isActive ? stop() : start()
     }
 
-    func start() {
-        guard !isActive, scanTask == nil, let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != getpid() else { NSSound.beep(); return }
+    func start(holding: CGEventFlags = []) {
+        guard !isActive, scanTask == nil else { return }
+        guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid() else {
+            NSSound.beep()
+            return
+        }
+        heldFlags = holding
         let pid = app.processIdentifier
         scanTask = Task { [weak self] in
             let found = await Task.detached { ElementScanner.scan(pid: pid) }.value
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             scanTask = nil
             guard !found.isEmpty else {
                 NSSound.beep()
@@ -42,6 +49,8 @@ final class ClickMode {
     }
 
     func stop() {
+        scanTask?.cancel()
+        scanTask = nil
         removeTap()
         overlays.forEach { $0.orderOut(nil) }
         overlays = []
@@ -131,9 +140,9 @@ final class ClickMode {
         }
         typed = candidate
         if let hit = matching.first(where: { $0.label == candidate }) {
+            let flags = flags.subtracting(heldFlags)
             let action: ClickAction = flags.contains(.maskCommand) ? .commandClick
-                : flags.contains(.maskShift) ? .rightClick
-                : flags.contains(.maskAlternate) ? .hover : .click
+                : flags.contains(.maskShift) ? .rightClick : .click
             let target = hit.target
             stop()
             Log.click.notice("\(String(describing: action), privacy: .public) \(target.role, privacy: .public) “\(target.title, privacy: .public)”")
@@ -156,10 +165,8 @@ final class ClickMode {
             let mode = Unmanaged<ClickMode>.fromOpaque(refcon).takeUnretainedValue()
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let flags = event.flags
-            var length = 0
-            var chars = [UniChar](repeating: 0, count: 4)
-            event.keyboardGetUnicodeString(maxStringLength: 4, actualStringLength: &length, unicodeString: &chars)
-            let character = String(utf16CodeUnits: chars, count: length)
+            // The plain letter: with ⌥ held, the event's own string is "å" rather than "a".
+            let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers ?? ""
             // The tap's run loop source is on the main run loop.
             let swallow = MainActor.assumeIsolated {
                 mode.handle(type, keyCode: keyCode, flags: flags, character: character)

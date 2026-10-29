@@ -19,7 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = settingsModel.settings
         hotkeys = HotkeyManager(settings: settings,
                                 onTrigger: { [weak self] in self?.palette.toggle() },
-                                onClickMode: { [weak self] in self?.startClickMode() })
+                                onClickMode: { [weak self] in self?.startClickMode() },
+                                onHold: { [weak self] down in self?.clickModeHeld(down) })
         hotkeys.apply(settings)
         index.apply(settings)
         palette.apply(settings)
@@ -53,6 +54,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showOnboarding()
             waitForAccessibility()
         }
+    }
+
+    /// Holding the hold key shows labels; letting go hides them (after a click they're already gone).
+    private func clickModeHeld(_ down: Bool) {
+        guard down else { clickMode.stop(); return }
+        palette.hide()
+        clickMode.start(holding: settingsModel.settings.clickHoldKey == .rightCommand ? .maskCommand : .maskAlternate)
     }
 
     private func startClickMode() {
