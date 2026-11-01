@@ -18,7 +18,7 @@ final class MenuBarController: NSObject {
         item.button?.image = image
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "Open Palette  (⇧⇧)", action: #selector(openPaletteAction), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Open Palette  (⌥)", action: #selector(openPaletteAction), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(settingsAction), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Permissions…", action: #selector(permissionsAction), keyEquivalent: "").target = self
         menu.addItem(.separator())

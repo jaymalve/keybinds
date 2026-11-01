@@ -1,6 +1,6 @@
 import Foundation
 
-doubleTapDetectorTests()
+optionTapDetectorTests()
 modifierEventTranslatorTests()
 settingsTests()
 

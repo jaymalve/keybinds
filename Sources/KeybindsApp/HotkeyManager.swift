@@ -1,7 +1,8 @@
 import AppKit
+import Carbon.HIToolbox
 import KeybindsCore
 
-/// Owns the palette triggers, double-tap Shift (event monitors) and an optional key combo (Carbon), plus the
+/// Owns the palette triggers, tapping ⌥ (event monitors) and an optional key combo (Carbon), plus the
 /// click-mode triggers: an optional combo and holding ⌥ (or right ⌘).
 /// `apply(_:)` takes effect immediately, so Settings changes need no restart.
 @MainActor
@@ -15,7 +16,7 @@ final class HotkeyManager {
     private var holdTimer: Timer?
     private var holding = false
     private var translator = ModifierEventTranslator()
-    private var detector: DoubleTapDetector
+    private var detector = OptionTapDetector()
     private var monitors: [Any] = []
     private var accessibilityReady = false
 
@@ -35,7 +36,6 @@ final class HotkeyManager {
         self.onTrigger = onTrigger
         self.onClickMode = onClickMode
         self.onHold = onHold
-        self.detector = DoubleTapDetector(timing: settings.doubleTap)
         // Release the combo while an excluded app is frontmost, so that app receives it.
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -46,8 +46,7 @@ final class HotkeyManager {
 
     func apply(_ settings: Settings) {
         self.settings = settings
-        detector = DoubleTapDetector(timing: settings.doubleTap)
-        if settings.doubleShiftEnabled { startDoubleShiftIfReady() } else { stopDoubleShift() }
+        if settings.optionTapEnabled { startOptionTapIfReady() } else { stopOptionTap() }
         updateHold()
         updateCombo()
     }
@@ -55,13 +54,13 @@ final class HotkeyManager {
     /// Call once Accessibility is granted. Listen-only: events are observed, never consumed.
     func accessibilityGranted() {
         accessibilityReady = true
-        startDoubleShiftIfReady()
+        startOptionTapIfReady()
         updateHold()
     }
 
     // MARK: Hold to click
 
-    /// Long enough that ⌥-arrow, ⌥-click and typing ⌥-characters (@ € { } on European layouts) never show labels.
+    /// Longer than `OptionTapDetector.maxHold`, so a tap never shows labels. Long enough that ⌥-arrow, ⌥-click and typing ⌥-characters (@ € { } on European layouts) never show labels.
     static let holdDelay: TimeInterval = 0.25
 
     private func updateHold() {
@@ -128,11 +127,11 @@ final class HotkeyManager {
         updateCombo()
     }
 
-    // MARK: Double Shift
+    // MARK: Option tap
 
-    private func startDoubleShiftIfReady() {
-        guard accessibilityReady, settings.doubleShiftEnabled, monitors.isEmpty else { return }
-        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
+    private func startOptionTapIfReady() {
+        guard accessibilityReady, settings.optionTapEnabled, monitors.isEmpty else { return }
+        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         // Global monitor: events going to other apps. Local monitor: events going to Keybinds (palette is key).
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
@@ -141,10 +140,10 @@ final class HotkeyManager {
             MainActor.assumeIsolated { self?.handle(event) }
             return event
         }) { monitors.append(local) }
-        Log.hotkey.notice("double-Shift monitoring started")
+        Log.hotkey.notice("option tap monitoring started")
     }
 
-    private func stopDoubleShift() {
+    private func stopOptionTap() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
     }
@@ -152,15 +151,15 @@ final class HotkeyManager {
     private func handle(_ event: NSEvent) {
         let events: [KeyEvent]
         switch event.type {
-        case .keyDown:
-            events = [.keyDown(event.timestamp)]
         case .flagsChanged:
             events = translator.flagsChanged(ModifierFlags(event.modifierFlags), at: event.timestamp)
         default:
-            return
+            events = [.keyDown(event.timestamp)]  // ⌥-click and ⌥-letter are chords, not taps
         }
         for e in events where detector.handle(e) {
-            Log.hotkey.debug("double-Shift fired")
+            // Secure input hides keystrokes from us, so ⌥-characters in a password field look like a pure tap.
+            guard !holding, !IsSecureEventInputEnabled(), !Self.menuIsOpen else { continue }
+            Log.hotkey.debug("option tap fired")
             onTrigger()
         }
     }

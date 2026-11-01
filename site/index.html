@@ -120,6 +120,9 @@
   .caps kbd { font-size: 16px; }
   kbd.down { transform: translateY(2px); box-shadow: 0 0 0 transparent; background: rgb(var(--tint) / .22); color: var(--fg); }
   .try .alt { opacity: .6; }
+  .try.hold { margin-top: 12px; cursor: default; }
+  .try.hold:hover { color: var(--muted); }
+  @media (hover: none) { .try.hold { display: none; } }
 
   .cta { margin-top: 36px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
   .btn {
@@ -181,6 +184,25 @@
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 
+
+  /* ---------- Click mode: same look as the app's outlines, ring, numbers and search pill ---------- */
+  .cm { position: fixed; inset: 0; z-index: 35; pointer-events: none; opacity: 0; transition: opacity .12s var(--ease); }
+  .cm.on { opacity: 1; }
+  .box { position: absolute; border-radius: 12px; border: 1px solid rgb(var(--tint) / .3); }
+  .box.best { border: 2px solid var(--fg); box-shadow: 0 0 0 4px rgb(var(--tint) / .16); }
+  .box span {
+    position: absolute; left: 0; top: 0; transform: translate(-40%, -40%); min-width: 20px; height: 20px; padding: 0 6px;
+    display: grid; place-items: center; border-radius: 6px; font: 500 12px var(--mono); color: var(--fg);
+    background: var(--glass); border: 1px solid rgb(var(--tint) / .2); backdrop-filter: blur(12px);
+  }
+  .pill {
+    position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); min-width: 220px; padding: 10px 18px;
+    text-align: center; font-size: 14px; color: var(--fg); border-radius: 999px; background: var(--glass);
+    border: 1px solid rgb(var(--tint) / .14); backdrop-filter: blur(28px) saturate(140%); box-shadow: 0 16px 50px var(--shadow);
+  }
+  .pill.idle { color: var(--muted); }
+  .mark, .name, h1, .lede, .try, .btn, .theme { transition: opacity .15s var(--ease), transform .2s var(--ease), background .2s, border-color .2s; }
+  body.narrowing :is(.mark, .name, h1, .lede, .cm-off) { opacity: .25; }
 
   /* ---------- Where a jump lands: a mock of the tab or window ---------- */
   .stage {
@@ -247,9 +269,13 @@
     <p class="lede">A command palette for your whole Mac. Jump to any app, window, <b>tab</b> or <b>file</b>, and click any <b>button</b>, all without the mouse.</p>
 
     <button class="try" id="try" aria-label="Open the demo palette">
-      <span class="caps"><kbd id="k1">⇧</kbd><kbd id="k2">⇧</kbd></span>
-      <span>Tap Shift twice to try it on this page</span>
+      <span class="caps"><kbd id="k1">⌥</kbd></span>
+      <span>Tap Option to try it on this page</span>
     </button>
+    <div class="try hold">
+      <span class="caps"><kbd id="kOpt">⌥</kbd></span>
+      <span>Hold Option and type to click anything here</span>
+    </div>
 
     <div class="cta">
       <a class="btn primary" href="#" id="download">Download for macOS</a>
@@ -259,8 +285,9 @@
 </main>
 
 <div class="toast" id="toast"></div>
+<div class="cm" id="cm"></div>
 
-<div class="stage" id="stage"><div class="mock" id="mock"></div><div class="hint">esc or ⇧⇧ to switch again</div></div>
+<div class="stage" id="stage"><div class="mock" id="mock"></div><div class="hint">esc or ⌥ to switch again</div></div>
 
 <div class="scrim" id="scrim"></div>
 <div class="palette" id="palette" role="dialog" aria-label="Keybinds demo">
@@ -414,28 +441,82 @@ q.addEventListener("keydown", e => {
 scrim.onclick = close;
 document.getElementById("try").onclick = open;
 
-// ---------- Double-tap Shift, same rule as the app: each tap ≤ 200 ms, ≤ 300 ms apart, nothing else pressed ----------
-const k1 = document.getElementById("k1"), k2 = document.getElementById("k2");
-let shiftDown = 0, dirty = false, lastTap = 0;
+// ---------- Tap ⌥, same rule as the app: released within 200 ms, nothing else pressed; held 250 ms is click mode ----------
+const k1 = document.getElementById("k1");
+let altDown = 0, holdTimer;
+const notTap = () => { altDown = 0; clearTimeout(holdTimer); };
 addEventListener("keydown", e => {
-  if (e.key === "Shift") {
-    if (!e.repeat) { shiftDown = performance.now(); dirty = e.metaKey || e.ctrlKey || e.altKey; (lastTap ? k2 : k1).classList.add("down"); }
+  if (e.key === "Alt") {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    altDown = performance.now(); k1.classList.add("down");
+    if (!isOpen() && !stage.classList.contains("open")) holdTimer = setTimeout(cmStart, 250);
     return;
   }
-  dirty = true; lastTap = 0;
+  notTap();
   if (e.key === "Escape") isOpen() ? close() : leave();
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); isOpen() ? close() : open(); }
 });
 addEventListener("keyup", e => {
-  if (e.key !== "Shift") return;
-  k1.classList.remove("down"); k2.classList.remove("down");
-  const now = performance.now();
-  if (dirty || now - shiftDown > 200) { dirty = false; lastTap = 0; return; }
-  if (lastTap && now - lastTap <= 300) { lastTap = 0; isOpen() ? close() : open(); }
-  else lastTap = now;
+  if (e.key !== "Alt") return;
+  k1.classList.remove("down");
+  const tapped = altDown && performance.now() - altDown <= 200;
+  notTap();
+  if (tapped) isOpen() ? close() : open();
 });
+addEventListener("mousedown", notTap);
+addEventListener("blur", notTap);
 
 if (location.hash === "#try") open();
+
+// ---------- Click mode, same rules as the app: hold ⌥, type to narrow, let go or ↩ clicks the ring, a digit clicks that match, Tab moves the ring ----------
+const cmEl = document.getElementById("cm"), kOpt = document.getElementById("kOpt");
+const clickables = [...document.querySelectorAll("button, a")];
+let cm = null;   // { query, ring, hits } while ⌥ is held
+
+function cmDraw() {
+  const label = el => `${el.textContent} ${el.getAttribute("aria-label") || ""}`;
+  cm.hits = clickables.map(el => ({ el, m: match(cm.query, label(el)) })).filter(h => h.m)
+    .sort((a, b) => b.m.score - a.m.score).map(h => h.el);
+  cm.ring = Math.min(cm.ring, Math.max(0, cm.hits.length - 1));
+  const typing = cm.query.length > 0;
+  document.body.classList.toggle("narrowing", typing);
+  clickables.forEach(el => el.classList.toggle("cm-off", !cm.hits.includes(el)));
+  const boxes = cm.hits.map((el, i) => {
+    const r = el.getBoundingClientRect();
+    return `<div class="box${typing && i === cm.ring ? " best" : ""}" style="left:${r.left - 5}px;top:${r.top - 5}px;width:${r.width + 10}px;height:${r.height + 10}px">${typing && i < 9 ? `<span>${i + 1}</span>` : ""}</div>`;
+  }).join("");
+  const pill = typing ? esc(cm.query) + (cm.hits.length ? "" : " — no matches") : "Type to find anything clickable";
+  cmEl.innerHTML = `${boxes}<div class="pill${typing ? "" : " idle"}">${pill}</div>`;
+}
+function cmStart() {
+  cm = { query: "", ring: 0, hits: [] };
+  kOpt.classList.add("down"); cmEl.classList.add("on"); cmDraw();
+}
+function cmEnd(el) {
+  cm = null;
+  kOpt.classList.remove("down"); cmEl.classList.remove("on");
+  document.body.classList.remove("narrowing");
+  clickables.forEach(c => c.classList.remove("cm-off"));
+  el?.click();
+}
+const cmRinged = () => cm.query ? cm.hits[cm.ring] : null;
+
+addEventListener("keydown", e => {
+  if (!cm) return;
+  if (e.metaKey || e.ctrlKey) return cmEnd();   // leave browser shortcuts alone
+  e.preventDefault(); e.stopImmediatePropagation();
+  // e.code, because with ⌥ held e.key is "å" rather than "a".
+  const letter = e.code.match(/^Key([A-Z])$/), digit = e.code.match(/^Digit([1-9])$/);
+  if (e.key === "Escape") cmEnd();
+  else if (e.key === "Enter") cmEnd(cmRinged());
+  else if (e.key === "Tab" && cm.hits.length) { cm.ring = (cm.ring + (e.shiftKey ? -1 : 1) + cm.hits.length) % cm.hits.length; cmDraw(); }
+  else if (e.key === "Backspace") { cm.query = cm.query.slice(0, -1); cm.ring = 0; cmDraw(); }
+  else if (digit && cm.query) { const el = cm.hits[digit[1] - 1]; if (el) cmEnd(el); }
+  else if (letter) { cm.query += letter[1].toLowerCase(); cm.ring = 0; cmDraw(); }
+}, true);
+addEventListener("keyup", e => { if (e.key === "Alt" && cm) cmEnd(cmRinged()); }, true);
+addEventListener("blur", () => { if (cm) cmEnd(); });
 
 // ---------- Light / dark ----------
 const root = document.documentElement;
