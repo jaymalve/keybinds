@@ -12,23 +12,23 @@ public struct ModifierFlags: OptionSet, Sendable {
     public static let function = ModifierFlags(rawValue: 1 << 4)
 }
 
-/// Turns full modifier-state snapshots into the edge events `DoubleTapDetector` consumes.
-/// Caps Lock is deliberately not a modifier here, so double-Shift keeps working while it's on.
+/// Turns full modifier-state snapshots into the edge events `OptionTapDetector` consumes.
+/// Caps Lock is deliberately not a modifier here, so the ⌥ tap keeps working while it's on.
 public struct ModifierEventTranslator: Sendable {
-    private var shiftHeld = false
+    private var optionHeld = false
 
     public init() {}
 
     public mutating func flagsChanged(_ flags: ModifierFlags, at time: TimeInterval) -> [KeyEvent] {
-        let shift = flags.contains(.shift)
-        defer { shiftHeld = shift }
+        let option = flags.contains(.option)
+        defer { optionHeld = option }
 
-        // Any change while ⌘/⌥/⌃/fn is held means Shift is part of a shortcut, not a tap.
-        if !flags.subtracting(.shift).isEmpty {
+        // Any change while ⌘/⇧/⌃/fn is held means ⌥ is part of a shortcut, not a tap.
+        if !flags.subtracting(.option).isEmpty {
             return [.otherModifierDown(time)]
         }
-        if shift && !shiftHeld { return [.shiftDown(time)] }
-        if !shift && shiftHeld { return [.shiftUp(time)] }
+        if option && !optionHeld { return [.optionDown(time)] }
+        if !option && optionHeld { return [.optionUp(time)] }
         return []
     }
 }

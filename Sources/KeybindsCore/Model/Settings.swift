@@ -1,9 +1,8 @@
 import Foundation
 
 public struct Settings: Codable, Equatable, Sendable {
-    /// Double-tap Shift opens and closes the palette.
-    public var doubleShiftEnabled: Bool
-    public var doubleTap: DoubleTapTiming
+    /// Tapping ⌥ opens and closes the palette.
+    public var optionTapEnabled: Bool
     /// Optional key combo that also opens the palette.
     public var paletteCombo: KeyCombo?
     /// While one of these apps is frontmost the combo is released, so the app gets the keystroke (e.g. ⌘K).
@@ -21,16 +20,15 @@ public struct Settings: Codable, Equatable, Sendable {
     /// Holding this key alone shows the click labels; letting go hides them.
     public var clickHoldKey: HoldKey
 
-    public static let `default` = Settings(doubleShiftEnabled: true, doubleTap: .default, paletteCombo: nil,
+    public static let `default` = Settings(optionTapEnabled: true, paletteCombo: nil,
                                            comboExcludedBundleIDs: [], disabledTabSources: [], showNotRunningApps: true,
                                            groupTabs: false, searchFiles: true, clickCombo: nil,
                                            clickHoldKey: .option)
 
-    public init(doubleShiftEnabled: Bool, doubleTap: DoubleTapTiming, paletteCombo: KeyCombo?,
+    public init(optionTapEnabled: Bool, paletteCombo: KeyCombo?,
                 comboExcludedBundleIDs: [String], disabledTabSources: Set<String>, showNotRunningApps: Bool,
                 groupTabs: Bool, searchFiles: Bool, clickCombo: KeyCombo?, clickHoldKey: HoldKey) {
-        self.doubleShiftEnabled = doubleShiftEnabled
-        self.doubleTap = doubleTap
+        self.optionTapEnabled = optionTapEnabled
         self.paletteCombo = paletteCombo
         self.comboExcludedBundleIDs = comboExcludedBundleIDs
         self.disabledTabSources = disabledTabSources
@@ -45,8 +43,7 @@ public struct Settings: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Settings.default
-        doubleShiftEnabled = try c.decodeIfPresent(Bool.self, forKey: .doubleShiftEnabled) ?? d.doubleShiftEnabled
-        doubleTap = try c.decodeIfPresent(DoubleTapTiming.self, forKey: .doubleTap) ?? d.doubleTap
+        optionTapEnabled = try c.decodeIfPresent(Bool.self, forKey: .optionTapEnabled) ?? d.optionTapEnabled
         paletteCombo = try c.decodeIfPresent(KeyCombo.self, forKey: .paletteCombo)
         comboExcludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .comboExcludedBundleIDs) ?? d.comboExcludedBundleIDs
         disabledTabSources = try c.decodeIfPresent(Set<String>.self, forKey: .disabledTabSources) ?? d.disabledTabSources

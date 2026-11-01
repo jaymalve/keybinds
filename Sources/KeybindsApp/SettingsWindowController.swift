@@ -65,17 +65,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Open the palette") {
-                Toggle("Double-tap Shift", isOn: $model.settings.doubleShiftEnabled)
-                if model.settings.doubleShiftEnabled {
-                    LabeledContent("Longest tap") {
-                        Slider(value: ms(\.maxHold), in: 100...400, step: 10)
-                        Text("\(Int(model.settings.doubleTap.maxHold * 1000)) ms").monospacedDigit().frame(width: 60, alignment: .trailing)
-                    }
-                    LabeledContent("Longest pause between taps") {
-                        Slider(value: ms(\.maxGap), in: 150...600, step: 10)
-                        Text("\(Int(model.settings.doubleTap.maxGap * 1000)) ms").monospacedDigit().frame(width: 60, alignment: .trailing)
-                    }
-                }
+                Toggle("Tap ⌥ Option", isOn: $model.settings.optionTapEnabled)
                 LabeledContent("Keyboard shortcut") {
                     ShortcutRecorder(combo: $model.settings.paletteCombo, recording: $model.recording)
                 }
@@ -131,11 +121,6 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 520)
         .frame(minHeight: 560)
-    }
-
-    private func ms(_ key: WritableKeyPath<DoubleTapTiming, TimeInterval>) -> Binding<Double> {
-        Binding(get: { model.settings.doubleTap[keyPath: key] * 1000 },
-                set: { model.settings.doubleTap[keyPath: key] = $0 / 1000 })
     }
 
     private func sourceToggle(_ title: String, _ source: String) -> some View {

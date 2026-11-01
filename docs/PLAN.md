@@ -15,7 +15,7 @@ Status: planning. No code yet.
 | Coverage | Every Mac app and window is jumpable. Deep (sub-window) support focuses on **browser tabs** and **terminal tabs/windows**. |
 | Audience | Personal tool now, open source later. Optimize for speed of iteration, but keep code clean enough to publish. |
 | Stack | Native Swift (AppKit + SwiftUI). |
-| Palette hotkey | **Double-tap Shift** by default. `⌘K` (with per-app exclusions) or any recorded combo is available as an alternative; see §3.6. |
+| Palette hotkey | **Tap ⌥** by default. `⌘K` (with per-app exclusions) or any recorded combo is available as an alternative; see §3.6. |
 | Empty query | Shows **recent targets** (frecency). |
 | Favicons | **Yes**, sourced locally first (see §3.8). |
 | Close/quit from palette | **Yes** (see §2 Actions). |
@@ -42,7 +42,7 @@ Status: planning. No code yet.
 ## 2. User experience
 
 ### Palette (MVP)
-1. Double-tap Shift (or the configured alternative hotkey). Double-tapping Shift again while the palette is open closes it.
+1. Tap ⌥ (or the configured alternative hotkey). Tapping ⌥ again while the palette is open closes it.
 2. A floating panel appears centered on the active screen, with the search field focused.
 3. With an empty query it shows **recent targets** (frecency-ranked), which makes it double as a smart Cmd+Tab.
 4. Typing fuzzy-matches across all targets.
@@ -94,7 +94,7 @@ Sources/
     Index/               # TargetIndex (cache + merge + change events)
     Search/              # FuzzyMatcher, Ranker (frecency)
     Activation/          # Activator (dispatches to provider)
-    Input/               # DoubleTapDetector (pure state machine, no AppKit)
+    Input/               # OptionTapDetector (pure state machine, no AppKit)
     System/              # AX helpers, AppleScript runner, permissions
     Persistence/         # JSON store (history, bindings, settings)
   KeybindsApp/           # AppKit/SwiftUI shell
@@ -174,22 +174,21 @@ Opening the palette must not wait on AppleScript, so we use **stale-while-revali
 ### 3.6 Hotkeys
 Two mechanisms, both owned by `HotkeyManager`:
 
-**A. Double-tap Shift (default palette trigger)**
-- Carbon hotkeys can't express "modifier tapped twice", so we use a **listen-only** `NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown])`. It needs Accessibility, which we already require, and it never blocks or swallows events.
-- A matching `addLocalMonitorForEvents` handles the double tap while the palette is key, which closes the palette.
-- **Detector** (a small pure state machine in `KeybindsCore`, unit-tested with synthetic event sequences). A double tap fires only when all of these hold:
-  - Each tap is a **pure Shift**: Shift down → Shift up with no `keyDown` and no other modifier in between.
-  - Each hold is **< ~200 ms**.
-  - The gap between the first release and the second press is **< ~300 ms**, with no keys pressed in between.
-  - Left or right Shift both count, and the two taps can mix sides.
-- Typing capitals ("Hello", "I'M", "THE") never qualifies, because a letter is pressed while Shift is held.
-- Thresholds live in settings and get tuned during spike M0.6.
-- Known limitation: macOS hides key events from other apps while secure input is on (password fields), so the double tap doesn't fire there. That's acceptable.
+**A. Tap ⌥ (default palette trigger)**
+- Carbon hotkeys can't express "modifier tapped", so we use a **listen-only** `NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, mouse down])`. It needs Accessibility, which we already require, and it never blocks or swallows events.
+- A matching `addLocalMonitorForEvents` handles the tap while the palette is key, which closes the palette.
+- **Detector** (a small pure state machine in `KeybindsCore`, unit-tested with synthetic event sequences). A tap fires only when all of these hold:
+  - It's a **pure ⌥**: ⌥ down → ⌥ up with no `keyDown`, click or other modifier in between.
+  - The hold is **≤ 200 ms**, below click mode's 250 ms hold delay, so one press is never both.
+  - Left or right ⌥ both count.
+- ⌥-arrow, ⌥-click and ⌥-characters (@ € { } on European layouts) never qualify, because another key or click happens while ⌥ is held.
+- It doesn't fire while a menu is open (⌥ reveals alternate items there) or during click mode.
+- Secure input (password fields) hides key events from other apps, which would make ⌥-characters look like pure taps, so the tap is off while secure input is on.
 
 **B. Key combos (alternative palette hotkey + all direct bindings)**
 - A small in-repo Carbon wrapper (`CarbonHotKey`, `RegisterEventHotKey`). It needs no permission and has no dependencies. *(M1: chosen over [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) to keep the CLT-only build dependency-free; revisit that library for its recorder UI in M4.)*
 - Binding hotkeys are registered dynamically from `bindings.json`.
-- Settings offers the palette trigger as **"Double Shift" (preset)**, **a recorded combo**, or both.
+- Settings offers the palette trigger as **"Tap ⌥" (preset)**, **a recorded combo**, or both.
 - **If you pick `⌘K`:** a global combo takes `⌘K` away from *every* app. Apps that use it include Terminal (clear scrollback), Cursor/VS Code (chord prefix and inline edit), Chrome (search from the address bar), and Slack/Notion/Linear. Mitigation: a **per-app exclusion list**. While an excluded app is frontmost, the combo is **unregistered** (driven by the `didActivateApplication` notification), so `⌘K` reaches that app normally.
 
 ### 3.7 Persistence
@@ -271,8 +270,8 @@ Developer ID signing + notarization, Sparkle updates, lower deployment target (m
 | AppleScript is slow with hundreds of tabs | Stale tab lists | Batched queries, caching, refresh on deactivate, per-app timeouts |
 | Automation prompts feel intrusive | Onboarding friction | Prompt lazily per app; each provider can be disabled |
 | Private APIs (`_AXUIElementGetWindow`) | Could break on OS updates | Keep them isolated in `System/`, with a graceful fallback to title matching |
-| Double Shift triggers by accident while typing | Palette pops up unexpectedly | Strict "pure tap" rules, tuned on recorded typing (M0.6); thresholds configurable; a combo fallback is available |
-| Double Shift unavailable without Accessibility permission | No palette trigger before onboarding finishes | Onboarding asks for Accessibility first; the menu-bar "Open palette" item always works |
+| ⌥ tap triggers by accident | Palette pops up unexpectedly | Strict "pure tap" rules; can be switched off in Settings; a combo fallback is available |
+| ⌥ tap unavailable without Accessibility permission | No palette trigger before onboarding finishes | Onboarding asks for Accessibility first; the menu-bar "Open palette" item always works |
 | Global combo (e.g. `⌘K`) shadows in-app shortcuts | Lost app functionality | Only an issue if the user picks one; per-app exclusion list (§3.6) |
 | Chromium `Favicons` DB schema changes | Missing favicons | Fall back to network fetch; never fatal |
 | Accidental close/quit from the palette | Lost tab or app state | Actions need an explicit modifier (`⌘W`/`⌘Q`); apps still show their own unsaved-changes prompts |

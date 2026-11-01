@@ -55,7 +55,7 @@ struct OnboardingView: View {
 
             PermissionRow(
                 title: "Accessibility",
-                detail: "Detects double-tap Shift and lists and switches windows. Required.",
+                detail: "Detects the ⌥ tap and lists and switches windows. Required.",
                 granted: model.accessibility,
                 action: ("Grant…", {
                     Permissions.requestAccessibility()
@@ -73,7 +73,7 @@ struct OnboardingView: View {
             Spacer()
 
             Text(model.accessibility
-                 ? "All set. Double-tap Shift to open the palette."
+                 ? "All set. Tap ⌥ Option to open the palette."
                  : "After granting, this updates automatically. No restart needed.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

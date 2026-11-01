@@ -14,7 +14,7 @@ func settingsTests() {
         let store = SettingsStore(url: dir.appendingPathComponent("settings.json"))
         var s = Settings.default
         s.paletteCombo = KeyCombo(keyCode: 40, modifiers: [.command])
-        s.doubleTap.maxGap = 0.4
+        s.optionTapEnabled = false
         try store.save(s)
         expect(try store.load(), s)
     }
@@ -23,8 +23,7 @@ func settingsTests() {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data(#"{"paletteCombo": {"keyCode": 40, "modifiers": ["command"]}}"#.utf8).write(to: url)
         let s = try SettingsStore(url: url).load()
-        expect(s.doubleShiftEnabled, true)
-        expect(s.doubleTap, DoubleTapTiming.default)
+        expect(s.optionTapEnabled, true)
         expect(s.paletteCombo, KeyCombo(keyCode: 40, modifiers: [.command]))
     }
     test("malformed file throws instead of resetting") {

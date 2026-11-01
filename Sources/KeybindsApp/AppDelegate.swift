@@ -18,7 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let settings = settingsModel.settings
         hotkeys = HotkeyManager(settings: settings,
-                                onTrigger: { [weak self] in self?.palette.toggle() },
+                                onTrigger: { [weak self] in
+                                    // The shortcut and Tab keep click mode up; ⌥ tapped during it isn't a palette request.
+                                    guard self?.clickMode.isActive != true else { return }
+                                    self?.palette.toggle()
+                                },
                                 onClickMode: { [weak self] in self?.startClickMode() },
                                 onHold: { [weak self] down in self?.clickModeHeld(down) })
         hotkeys.apply(settings)
