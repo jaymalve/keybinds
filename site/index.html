@@ -31,12 +31,11 @@
     --ease: cubic-bezier(.2, .8, .2, 1);
 
     /* Dark (default) */
-    --page: radial-gradient(120% 90% at 50% 0%, #22252B 0%, var(--obsidian) 45%, var(--ink) 100%);
+    --page: #000000;
     --fg: var(--snow);
     --fg2: var(--silver);
     --tint: 216 220 227;
     --hi: 247 248 250;
-    --h1-end: #A9AEB7;
     --glass: rgba(28,30,35,.82);
     --toast: rgba(23,25,29,.85);
     --scrim: rgba(5,6,8,.35);
@@ -49,13 +48,12 @@
     color-scheme: dark;
   }
   :root[data-theme="light"] {
-    --page: radial-gradient(120% 90% at 50% 0%, #FFFFFF 0%, var(--snow) 45%, #E4E7EC 100%);
+    --page: var(--snow);
     --fg: var(--obsidian);
     --fg2: var(--graphite);
     --muted: #6B7079;
     --tint: 23 25 29;
     --hi: 23 25 29;
-    --h1-end: #5C626D;
     --glass: rgba(255,255,255,.90);
     --toast: rgba(255,255,255,.92);
     --scrim: rgba(23,25,29,.10);
@@ -86,25 +84,24 @@
   /* ---------- Hero ---------- */
   main {
     position: relative; z-index: 10; height: 100%;
-    display: grid; place-items: center; text-align: center; padding: 24px;
+    display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; justify-items: start;
+    padding: 24px clamp(24px, 10vw, 140px);
   }
-  .hero { max-width: 780px; display: grid; justify-items: center; }
+  .hero { max-width: 780px; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; }
   .mark { width: 88px; height: 88px; filter: drop-shadow(0 18px 40px var(--shadow)); margin-bottom: 28px; }
   .mark img { width: 100%; height: 100%; }
   .mark:hover img { transform: rotate(-4deg) scale(1.04); }
   .mark img { transition: transform .5s var(--ease); }
   .name { font-size: 15px; letter-spacing: .02em; color: var(--muted); margin-bottom: 18px; }
   h1 {
-    font-size: clamp(36px, 6vw, 60px); line-height: 1.04; letter-spacing: -.035em; font-weight: 600;
-    background: linear-gradient(180deg, var(--fg) 30%, var(--h1-end) 100%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-size: clamp(36px, 6vw, 60px); line-height: 1.04; letter-spacing: -.035em; font-weight: 600; color: var(--fg);
   }
   .lede { margin-top: 18px; font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 500px; }
   .lede b { color: var(--fg2); font-weight: 500; }
 
   /* The try-it line */
   .try {
-    margin-top: 40px; display: inline-flex; align-items: center; gap: 12px;
+    margin-top: 40px; padding: 0; display: inline-flex; align-items: center; gap: 12px;
     font-size: 14px; color: var(--muted); background: none; border: 0; cursor: pointer; font-family: inherit;
   }
   .try:hover { color: var(--fg2); }
@@ -113,7 +110,7 @@
     font-family: var(--mono); font-size: 13px; color: var(--fg2);
     min-width: 30px; height: 30px; padding: 0 8px; display: inline-grid; place-items: center;
     border-radius: 8px; border: 1px solid rgb(var(--tint) / .16);
-    background: linear-gradient(180deg, rgb(var(--tint) / .10), rgb(var(--tint) / .03));
+    background: rgb(var(--tint) / .07);
     box-shadow: 0 2px 0 var(--key-shadow), inset 0 1px 0 rgba(255,255,255,.06);
     transition: transform .08s, box-shadow .08s, background .08s, color .08s;
   }
@@ -124,7 +121,7 @@
   .try.hold:hover { color: var(--muted); }
   @media (hover: none) { .try.hold { display: none; } }
 
-  .cta { margin-top: 36px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .cta { margin-top: 36px; display: flex; gap: 12px; flex-wrap: wrap; }
   .btn {
     font-size: 14px; font-weight: 500; text-decoration: none; padding: 11px 18px; border-radius: 11px;
     transition: transform .2s var(--ease), background .2s, border-color .2s;
