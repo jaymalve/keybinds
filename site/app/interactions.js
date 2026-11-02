@@ -231,7 +231,6 @@ export function startDemo() {
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", e => {
     if (!localStorage.getItem("theme")) root.dataset.theme = e.matches ? "light" : "dark";
   }, { signal });
-  document.getElementById("download").onclick = e => { e.preventDefault(); toast("Coming soon — the first build is in testing"); };
 
   return () => controller.abort();
 }
