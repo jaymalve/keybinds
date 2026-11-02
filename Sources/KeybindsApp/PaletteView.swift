@@ -24,8 +24,8 @@ struct PaletteView: View {
 
             Divider()
 
-            if model.browsing, case let extras = model.duplicateExtras, !extras.isEmpty {
-                duplicatesBanner(extras.count)
+            if model.browsing, case let groups = PaletteRows.duplicateTabs(model.index.targets), !groups.isEmpty {
+                duplicatesBanner(groups)
             }
 
             if rows.isEmpty {
@@ -84,12 +84,21 @@ struct PaletteView: View {
         }
     }
 
-    private func duplicatesBanner(_ count: Int) -> some View {
-        HStack(spacing: 8) {
+    /// `groups` holds every copy of each page; the count is the extras, which is what ⌘⇧⌫ closes.
+    private func duplicatesBanner(_ groups: [[Target]]) -> some View {
+        let count = groups.reduce(0) { $0 + $1.count - 1 }
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "square.on.square")
-            Text("\(count) duplicate \(count == 1 ? "tab" : "tabs") open")
-            Spacer()
-            Text("⌘⇧⌫ closes the extra copies").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text("\(count) duplicate \(count == 1 ? "tab" : "tabs") open")
+                    Spacer()
+                    Text("⌘⇧⌫ closes the extra copies").foregroundStyle(.secondary)
+                }
+                Text(groups.map { "\($0[0].title) ×\($0.count)" }.joined(separator: "  ·  "))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
         .font(.callout)
         .padding(.horizontal, 18)
