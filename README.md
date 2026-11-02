@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/icon.svg" alt="Keybinds" width="88" />
+  <img src="site/public/assets/icon.svg" alt="Keybinds" width="88" />
   <h1>Keybinds</h1>
   <p><strong>Everything on your Mac. A keystroke away.</strong></p>
   <p>A command palette for your whole Mac.<br />Jump to any app, window, tab or file, and click any button, all without the mouse.</p>
